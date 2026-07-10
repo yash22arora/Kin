@@ -146,15 +146,19 @@ struct SkyView: View {
                 .font(.footnote.smallCaps())
                 .foregroundStyle(.white.opacity(0.5))
             Spacer()
-            HStack(alignment: .center, spacing: 4) {
+            HStack(alignment: .center, spacing: 0) {
                 Button { showAddStar = true } label: {
                     Image(systemName: "plus.viewfinder")
                         .foregroundStyle(.white.opacity(0.5))
+                        .frame(width: 44, height: 44) // Apple-minimum hit target
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel("New star")
                 Button { showSettings = true } label: {
                     Image(systemName: "moon.stars")
                         .foregroundStyle(.white.opacity(0.5))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Settings")
             }
@@ -185,6 +189,12 @@ struct SkyView: View {
     private func configureScene() {
         scene.apply(snapshot)
         publishToWidget(snapshot)
+        // Flag-gated ambience. Evaluated on appear from PostHog's cache, so a
+        // remote change takes effect on the next launch — good enough for vibes.
+        // Shower supersedes lone comets. Debug defaults live on FeatureFlag.
+        scene.ambientMode = FeatureFlags.isEnabled(.meteorShower) ? .meteorShower
+                          : FeatureFlags.isEnabled(.randomComet) ? .comets
+                          : .none
         scene.onStarTap = { id in
             scene.focus(on: id) // the sky leans in…
             selectedPersonID = id

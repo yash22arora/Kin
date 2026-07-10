@@ -79,20 +79,56 @@ enum WidgetSky {
         let side = min(size.width, size.height)
         let center = mapped(star.x, star.y, in: size)
         let sizeScale = max(0.8, min(1.8, side / 160)) // small → large widgets
-        let radius = (3.0 + star.luminosity * 5.0) * sizeScale
+        let lum = star.luminosity
+        let r = (2.6 + lum * 3.6) * sizeScale
         let tint = color(temperature: star.temperature)
 
-        // Halo — the star's color, blurred
-        var halo = context
-        halo.opacity = star.luminosity * 0.45
-        halo.addFilter(.blur(radius: radius * 0.8))
-        halo.fill(starPath(at: center, radius: radius * 1.7), with: .color(tint))
-        // Colored star
-        context.opacity = star.luminosity
-        context.fill(starPath(at: center, radius: radius), with: .color(tint))
-        // White-hot core, like the app's baked texture
-        context.opacity = star.luminosity * 0.92
-        context.fill(starPath(at: center, radius: radius * 0.55, waist: 0.12), with: .color(.white))
+        func circleRect(_ radius: CGFloat) -> CGRect {
+            CGRect(x: center.x - radius, y: center.y - radius,
+                   width: radius * 2, height: radius * 2)
+        }
+
+        // Wide tinted halo — atmosphere, barely there.
+        context.fill(
+            Circle().path(in: circleRect(r * 3.4)),
+            with: .radialGradient(
+                Gradient(stops: [
+                    .init(color: tint.opacity(0.28 * lum), location: 0),
+                    .init(color: tint.opacity(0.08 * lum), location: 0.4),
+                    .init(color: .clear, location: 1),
+                ]),
+                center: center, startRadius: 0, endRadius: r * 3.4
+            )
+        )
+
+        // Diffraction cross — brightest stars only, hairline, under the core.
+        if lum > 0.55 {
+            let crossAlpha = (lum - 0.55) / 0.45 * 0.30
+            let arm = r * 2.6
+            var cross = Path()
+            cross.move(to: CGPoint(x: center.x, y: center.y - arm))
+            cross.addLine(to: CGPoint(x: center.x, y: center.y + arm))
+            cross.move(to: CGPoint(x: center.x - arm, y: center.y))
+            cross.addLine(to: CGPoint(x: center.x + arm, y: center.y))
+            context.stroke(cross, with: .color(.white.opacity(crossAlpha)),
+                           style: .init(lineWidth: 0.7, lineCap: .round))
+        }
+
+        // The point of light: white-hot center → tinted falloff → nothing.
+        // Mirrors SkyScene.pointImage — the app/widget fidelity contract.
+        context.fill(
+            Circle().path(in: circleRect(r * 1.5)),
+            with: .radialGradient(
+                Gradient(stops: [
+                    .init(color: .white.opacity(1.0 * lum + 0.25), location: 0),
+                    .init(color: .white.opacity(0.9 * lum), location: 0.10),
+                    .init(color: tint.opacity(0.55 * lum), location: 0.28),
+                    .init(color: tint.opacity(0.14 * lum), location: 0.55),
+                    .init(color: .clear, location: 1),
+                ]),
+                center: center, startRadius: 0, endRadius: r * 1.5
+            )
+        )
     }
 
     /// Position mapping shared by stars and lines: centered square.

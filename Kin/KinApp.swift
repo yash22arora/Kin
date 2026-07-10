@@ -10,13 +10,14 @@ struct KinApp: App {
         // (iCloud parked; see KinModelContainer for the re-enable recipe.)
         container = KinModelContainer.shared
         Store.shared.start()
+        FeatureFlags.refresh()
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .preferredColorScheme(.dark) // the sky is always night
-                .environment(\.analytics, AnalyticsFactory.makeClient())
+                .environment(\.analytics, AnalyticsFactory.shared)
         }
         .modelContainer(container)
     }

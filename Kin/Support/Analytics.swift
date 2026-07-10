@@ -80,16 +80,96 @@ struct NoopAnalytics: AnalyticsClient {
 // Until both are done, this compiles out and Noop stays active.
 
 enum AnalyticsFactory {
-    /// Paste your TelemetryDeck app ID here to go live.
+    static let postHogAPIKey = "phc_CqezDHhg42W8CMX8zWHhw7RWRkQHGLeyR86DDQFBaJZK"
+    static let postHogHost = "https://us.i.posthog.com" // or eu.i.posthog.com
+
+    /// Legacy option — TelemetryDeck, if you ever prefer it.
     static let telemetryDeckAppID = ""
 
-    static func makeClient() -> AnalyticsClient {
+    /// Memoized — SwiftUI body re-evaluations must not re-run PostHog setup.
+    static let shared: AnalyticsClient = makeClient()
+
+    private static func makeClient() -> AnalyticsClient {
+        #if canImport(PostHog)
+        if !postHogAPIKey.isEmpty {
+            return PostHogAnalytics(apiKey: postHogAPIKey, host: postHogHost)
+        }
+        #endif
         #if canImport(TelemetryDeck)
         if !telemetryDeckAppID.isEmpty {
             return TelemetryDeckAnalytics(appID: telemetryDeckAppID)
         }
         #endif
         return NoopAnalytics()
+    }
+}
+
+// MARK: - PostHog (events + feature flags)
+// Resolves via SPM (github.com/PostHog/posthog-ios, 3.56.0+). Configured
+// privacy-first: no screen autocapture, no session replay, anonymous —
+// we never call identify(), so no person profiles are created.
+
+#if canImport(PostHog)
+import PostHog
+
+struct PostHogAnalytics: AnalyticsClient {
+    init(apiKey: String, host: String) {
+        let config = PostHogConfig(projectToken: apiKey, host: host)
+        config.captureScreenViews = false          // we track meaning, not screens
+        config.captureApplicationLifecycleEvents = true
+        PostHogSDK.shared.setup(config)
+    }
+
+    func track(_ event: AnalyticsEvent) {
+        PostHogSDK.shared.capture(event.name, properties: event.parameters)
+    }
+}
+#endif
+
+/// Every feature flag in the app, in one place. Add a case here, create the
+/// flag in PostHog with the same raw value, and gate code with
+/// `FeatureFlags.isEnabled(.myFlag)`. Never use string literals at call sites.
+enum FeatureFlag: String, CaseIterable {
+    case randomComet = "random_comet"     // lone meteor streak every 20–25s
+    case meteorShower = "meteor_shower"   // burst events; overrides randomComet
+
+    /// What debug builds see before PostHog is keyed in / flags load.
+    /// Release builds always default to false — dark until the flag speaks.
+    var debugDefault: Bool {
+        switch self {
+        case .randomComet: return true
+        case .meteorShower: return true // flip off to watch lone comets in dev
+        }
+    }
+}
+
+/// Feature flags, PostHog-backed. Works offline (last-known values are
+/// cached by the SDK) and degrades to defaults when analytics is off —
+/// the app must never behave differently just because flags can't load.
+enum FeatureFlags {
+    static func isEnabled(_ flag: FeatureFlag) -> Bool {
+        #if DEBUG
+        isEnabled(flag.rawValue, default: flag.debugDefault)
+        #else
+        isEnabled(flag.rawValue, default: false)
+        #endif
+    }
+
+    static func isEnabled(_ key: String, default defaultValue: Bool = false) -> Bool {
+        #if canImport(PostHog)
+        guard !AnalyticsFactory.postHogAPIKey.isEmpty else { return defaultValue }
+        return PostHogSDK.shared.isFeatureEnabled(key)
+        #else
+        return defaultValue
+        #endif
+    }
+
+    /// Call at launch (Store.start-time) so flags are fresh for the session.
+    static func refresh() {
+        #if canImport(PostHog)
+        guard !AnalyticsFactory.postHogAPIKey.isEmpty else { return }
+        PostHogSDK.shared.reloadFeatureFlags()
+        #endif
     }
 }
 
