@@ -1,0 +1,32 @@
+{
+  "identifier" : "F1C0DE00-0000-0000-0000-000000000001",
+  "nonRenewingSubscriptions" : [ ],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : true,
+      "internalID" : "F1C0DE00-0000-0000-0000-000000000002",
+      "localizations" : [
+        {
+          "description" : "Every star, forever. No subscription.",
+          "displayName" : "Kin Lifetime",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.servatom.kin.lifetime",
+      "referenceName" : "Kin Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [ ]
+  },
+  "subscriptionGroups" : [ ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
