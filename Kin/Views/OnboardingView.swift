@@ -3,11 +3,18 @@ import SwiftData
 import StoreKit
 
 /// The first 90 seconds. Full-screen, dark, skippable at every step.
+/// Also serves as the replayable tour ("walk through Kin again" in settings):
+/// with `isReplay`, existing stars are honored — no re-collection, no
+/// duplicates, no pricing pitch — just the features, revisited.
 struct OnboardingView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.analytics) private var analytics
     @AppStorage("stargazingHour") private var stargazingHour = 21
     @AppStorage("stargazingEnabled") private var stargazingEnabled = false
+    @Query(filter: #Predicate<Person> { $0.stateRaw != "released" })
+    private var existingPeople: [Person]
+
+    var isReplay: Bool = false
     let onComplete: () -> Void
 
     private enum Step: Int { case light, names, orbits, sky, demo, ritual, widget, deal }
@@ -52,11 +59,14 @@ struct OnboardingView: View {
                            value: heroBreathing)
                 .onAppear { heroBreathing = true }
             Text("Everyone you love is a light.")
-                .font(.title3).foregroundStyle(.white.opacity(0.9))
+                .font(KinType.heroLine).foregroundStyle(.white.opacity(0.9))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
-        .onTapGesture { step = .names }
+        .onTapGesture {
+            // Replaying with a sky already full? Skip straight to the reveal.
+            step = (isReplay && !existingPeople.isEmpty) ? .sky : .names
+        }
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Tap to continue")
     }
@@ -65,7 +75,7 @@ struct OnboardingView: View {
     private var namesStep: some View {
         VStack(spacing: 24) {
             Text("Who lights up your life?")
-                .font(.title2).foregroundStyle(.white)
+                .font(KinType.title).foregroundStyle(.white)
             Text("Name a few. You can always add more.")
                 .font(.footnote).foregroundStyle(.white.opacity(0.5))
 
@@ -109,7 +119,7 @@ struct OnboardingView: View {
         return VStack(spacing: 24) {
             if let name = unanswered {
                 Text("How often do your paths cross with \(name)?")
-                    .font(.title3).foregroundStyle(.white)
+                    .font(KinType.title).foregroundStyle(.white)
                     .multilineTextAlignment(.center)
                 ForEach(OrbitCadence.allCases, id: \.self) { orbit in
                     Button(orbit.label) {
@@ -127,7 +137,14 @@ struct OnboardingView: View {
     }
 
     private func createStars() {
+        // Never duplicate an existing star (matters on replay, and protects
+        // against "Mom" typed twice in a fresh run).
+        let existing = Set(existingPeople.map { $0.name.lowercased() })
+        var seen = Set<String>()
         for name in names {
+            let key = name.lowercased()
+            guard !existing.contains(key), !seen.contains(key) else { continue }
+            seen.insert(key)
             context.insert(Person(name: name, orbit: orbits[name] ?? .weekly))
         }
         analytics.track(.starCreated(countBucket: names.count <= 3 ? "1-3" : names.count <= 7 ? "4-7" : "8+"))
@@ -138,8 +155,10 @@ struct OnboardingView: View {
     private var skyStep: some View {
         VStack(spacing: 24) {
             Text("This is your sky on \(Date.now.formatted(.dateTime.month(.wide).day())).")
-                .font(.title3).foregroundStyle(.white)
-            Text("Tend it, and it glows.")
+                .font(KinType.title).foregroundStyle(.white)
+            Text(isReplay && !existingPeople.isEmpty
+                 ? "\(existingPeople.count) star\(existingPeople.count == 1 ? "" : "s"), still glowing."
+                 : "Tend it, and it glows.")
                 .font(.footnote).foregroundStyle(.white.opacity(0.5))
             Button("Continue") { step = .demo }
                 .buttonStyle(.borderedProminent).tint(.white.opacity(0.2))
@@ -150,7 +169,7 @@ struct OnboardingView: View {
     private var ritualStep: some View {
         VStack(spacing: 24) {
             Text("A small evening ritual?")
-                .font(.title3).foregroundStyle(.white)
+                .font(KinType.title).foregroundStyle(.white)
             Text("One quiet reminder a day: “The sky is out.”\nNever more. Never about anyone.")
                 .font(.footnote).foregroundStyle(.white.opacity(0.5))
                 .multilineTextAlignment(.center)
@@ -179,18 +198,65 @@ struct OnboardingView: View {
     }
 
     // 7 — widget invite
+    @State private var widgetBobbing = false
+
+    /// A floating mock of the My Sky widget, rendering the user's actual
+    /// stars — the same trick the home screen's widget gallery uses.
+    private var widgetPreview: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .fill(LinearGradient(
+                    colors: [Color(red: 0.03, green: 0.03, blue: 0.10),
+                             Color(red: 0.07, green: 0.06, blue: 0.18)],
+                    startPoint: .top, endPoint: .bottom))
+            ForEach(Array(previewStars.enumerated()), id: \.offset) { _, star in
+                Image(uiImage: SkyScene.pointImage(temperature: star.temperature))
+                    .resizable()
+                    .frame(width: 10 + star.luminosity * 14,
+                           height: 10 + star.luminosity * 14)
+                    .opacity(0.5 + 0.5 * star.luminosity)
+                    .position(x: star.x * 158, y: star.y * 158)
+            }
+        }
+        .frame(width: 158, height: 158)
+        .shadow(color: .black.opacity(0.55), radius: 22, y: 12)
+        .offset(y: widgetBobbing ? -7 : 7)
+        .animation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true),
+                   value: widgetBobbing)
+        .onAppear { widgetBobbing = true }
+        .accessibilityHidden(true)
+    }
+
+    /// The user's real stars if they have any; a small demo sky otherwise.
+    private var previewStars: [(x: Double, y: Double, luminosity: Double, temperature: Double)] {
+        let people = existingPeople.sorted { $0.createdAt < $1.createdAt }.prefix(7)
+        guard !people.isEmpty else {
+            return [(0.30, 0.28, 0.9, 0.2), (0.68, 0.42, 0.6, 0.7),
+                    (0.45, 0.66, 0.75, 0.45), (0.78, 0.75, 0.4, 0.9)]
+        }
+        return people.enumerated().map { index, person in
+            let pos: (x: Double, y: Double) = person.positionX >= 0
+                ? (person.positionX, person.positionY)
+                : SkyLayout.seededPosition(seed: person.colorSeed, index: index, total: people.count)
+            return (pos.x, pos.y, person.luminosity(),
+                    SkyLayout.temperature(colorSeed: person.colorSeed))
+        }
+    }
+
     private var widgetStep: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "square.grid.2x2")
-                .font(.largeTitle).foregroundStyle(.white.opacity(0.6))
+        VStack(spacing: 28) {
+            widgetPreview
             Text("Keep your sky on your home screen.")
-                .font(.title3).foregroundStyle(.white)
+                .font(KinType.title).foregroundStyle(.white)
                 .multilineTextAlignment(.center)
             Text("Touch and hold your home screen, tap +, and look for Kin. Your stars, glowing at a glance.")
                 .font(.footnote).foregroundStyle(.white.opacity(0.5))
                 .multilineTextAlignment(.center)
-            Button("Continue") { step = .deal }
-                .buttonStyle(.borderedProminent).tint(.white.opacity(0.2))
+            // Replays skip the pricing pitch — they already live here.
+            Button(isReplay ? "Back to your sky" : "Continue") {
+                if isReplay { onComplete() } else { step = .deal }
+            }
+            .buttonStyle(.borderedProminent).tint(.white.opacity(0.2))
         }
         .padding(32)
     }
@@ -199,7 +265,7 @@ struct OnboardingView: View {
     private var dealStep: some View {
         VStack(spacing: 24) {
             Text("The deal, plainly.")
-                .font(.title3).foregroundStyle(.white)
+                .font(KinType.title).foregroundStyle(.white)
             Text("Kin is yours, fully, free for 7 days.\nThen \(Store.shared.lifetimeProduct?.displayPrice ?? "$4.99"), once, forever — or keep a free sky of 3 stars.\n\nNo subscription. No account.\nYour sky never leaves your device.")
                 .font(.callout).foregroundStyle(.white.opacity(0.6))
                 .multilineTextAlignment(.center)

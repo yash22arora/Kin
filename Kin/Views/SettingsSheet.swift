@@ -123,6 +123,8 @@ struct ExportView: View {
 
 /// Transparency page — users deserve to know the rules of their own sky.
 struct HowGlowWorksView: View {
+    @State private var showTour = false
+
     var body: some View {
         ScrollView {
             Text("""
@@ -136,10 +138,35 @@ struct HowGlowWorksView: View {
             Nothing is scored. Nothing is a streak. Your sky just reflects, gently, \
             where the light has been lately.
             """)
-            .padding()
             .foregroundStyle(.white.opacity(0.85))
+            .padding()
         }
         .background(Color(red: 0.03, green: 0.03, blue: 0.10))
         .navigationTitle("How glow works")
+        // Pinned to the bottom, alive: this is an invitation, not a setting.
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                showTour = true
+            } label: {
+                Label("Walk through Kin again", systemImage: "sparkles")
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(colors: [.white.opacity(0.20), .white.opacity(0.10)],
+                                       startPoint: .top, endPoint: .bottom),
+                        in: Capsule()
+                    )
+                    .overlay(Capsule().strokeBorder(.white.opacity(0.35)))
+                    .shadow(color: .white.opacity(0.15), radius: 12)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 8)
+            .accessibilityHint("Replays the guided introduction. Your stars are untouched.")
+        }
+        .fullScreenCover(isPresented: $showTour) {
+            OnboardingView(isReplay: true) { showTour = false }
+        }
     }
 }

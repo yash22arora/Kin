@@ -21,7 +21,7 @@ struct PaywallView: View {
                 .foregroundStyle(.white.opacity(0.9))
 
             Text("Your sky has \(people.count) stars\nand \(moments.count) moments.")
-                .font(.title2.weight(.medium))
+                .font(KinType.heroLine)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
 

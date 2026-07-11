@@ -30,7 +30,7 @@ struct GlowDemoView: View {
                 .accessibilityLabel("How your sky works.")
 
             Text(caption)
-                .font(.callout)
+                .font(KinType.whisper)
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
                 .frame(minHeight: 44, alignment: .top)

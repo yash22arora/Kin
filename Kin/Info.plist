@@ -17,5 +17,9 @@
 	</array>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Kin can lock your sky so only you can see it.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Fraunces.ttf</string>
+	</array>
 </dict>
 </plist>

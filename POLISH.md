@@ -1,5 +1,12 @@
 # Kin — Visual Polish Backlog (post-functionality)
 
+## Next up: onboarding upgrades (agreed, not yet built)
+- Live starfield (dust + faint stars) behind ALL onboarding steps
+- Names igniting into their real seeded sky positions as they're typed
+- Orbit step goes visual: tappable orbit rings around the person's star
+- Haptic crescendo: warmer haptic per step, peaking at the sky reveal
+- Line-by-line text reveal for poetic headlines
+
 ## ⏸ Parked: pick up just before CloudKit integration
 - **Siri phrase refinement** — "Log a moment" works; StarBrightness and OpenStar
   phrases don't resolve reliably. Try: more phrase variants per shortcut,

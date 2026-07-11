@@ -91,7 +91,7 @@ struct StarDetailView: View {
             // hangs in the sky above this sheet. The sheet is just words.
             let lum = person.luminosity()
             Text(person.name)
-                .font(.title2.weight(.medium))
+                .font(KinType.title)
                 .foregroundStyle(.white)
                 .padding(.top, 8)
                 .accessibilityLabel("\(person.name). \(lum > 0.7 ? "Bright" : lum > 0.45 ? "Glowing" : "Distant").")
