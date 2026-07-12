@@ -27,9 +27,14 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
     private let cameraNode = SKCameraNode()
     private let backgroundNode = SKSpriteNode()
     private let dustLayer = SKNode()
+    private let ambientLayer = SKNode()
     private let lineLayer = SKNode()
     private let starLayer = SKNode()
     private var ghostNode: StarNode?
+
+    // Ambient starfield (onboarding backdrop): faint distant stars, gently
+    // twinkling, kept as unit coords so they survive resize.
+    private var ambientUnits: [(node: SKSpriteNode, x: CGFloat, y: CGFloat)] = []
 
     // Parallax
     private let motionManager = CMMotionManager()
@@ -64,6 +69,8 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
 
         dustLayer.zPosition = -5
         addChild(dustLayer)
+        ambientLayer.zPosition = -4
+        addChild(ambientLayer)
         lineLayer.zPosition = -1
         starLayer.addChild(lineLayer)
         starLayer.zPosition = 0
@@ -71,6 +78,7 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
 
         layoutBackground()
         rebuildDustField()
+        rebuildAmbientStarfield()
 
         let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
         longPress.minimumPressDuration = 0.45
@@ -94,6 +102,7 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
         guard size.width > 0, size.height > 0 else { return }
         layoutBackground()
         rebuildDustField()
+        repositionAmbientStarfield()
         if focusedStarID == nil {
             cameraNode.position = CGPoint(x: size.width / 2, y: size.height / 2)
         }
@@ -204,6 +213,56 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
                 y: .random(in: -size.height * 0.2...size.height * 1.2)
             )
             dustLayer.addChild(dust)
+        }
+    }
+
+    // MARK: Ambient starfield (onboarding backdrop)
+
+    /// A faint field of distant, gently twinkling stars — quiet atmosphere
+    /// behind the user's own. Off by default; onboarding turns it on so the
+    /// sky feels alive even before a single name is given.
+    var showsAmbientStarfield = false {
+        didSet {
+            guard showsAmbientStarfield != oldValue else { return }
+            rebuildAmbientStarfield()
+        }
+    }
+
+    private func rebuildAmbientStarfield() {
+        ambientLayer.removeAllChildren()
+        ambientUnits.removeAll()
+        guard showsAmbientStarfield, size.width > 0, size.height > 0 else { return }
+        for _ in 0..<55 {
+            let ux = CGFloat.random(in: 0.02...0.98)
+            let uy = CGFloat.random(in: 0.04...0.98)
+            let node = SKSpriteNode(texture: Self.starTexture(temperature: .random(in: 0.35...0.9)))
+            let s = CGFloat.random(in: 3...8)
+            node.size = CGSize(width: s, height: s)
+            let base = CGFloat.random(in: 0.10...0.32)
+            node.alpha = base
+            node.position = CGPoint(x: ux * size.width, y: uy * size.height)
+            ambientLayer.addChild(node)
+            ambientUnits.append((node, ux, uy))
+
+            guard !reduceMotion else { continue }
+            // Slow, out-of-sync scintillation so the field breathes, never pulses.
+            let dip = base * CGFloat.random(in: 0.55...0.8)
+            let down = SKAction.fadeAlpha(to: dip, duration: .random(in: 1.6...3.2))
+            down.timingMode = .easeInEaseOut
+            let up = SKAction.fadeAlpha(to: base, duration: .random(in: 1.6...3.2))
+            up.timingMode = .easeInEaseOut
+            node.run(.sequence([
+                .wait(forDuration: .random(in: 0...2.5)),
+                .repeatForever(.sequence([down, up])),
+            ]))
+        }
+    }
+
+    private func repositionAmbientStarfield() {
+        guard showsAmbientStarfield else { return }
+        if ambientUnits.isEmpty { rebuildAmbientStarfield(); return }
+        for entry in ambientUnits {
+            entry.node.position = CGPoint(x: entry.x * size.width, y: entry.y * size.height)
         }
     }
 

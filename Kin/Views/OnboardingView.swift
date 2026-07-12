@@ -20,13 +20,25 @@ struct OnboardingView: View {
 
     private enum Step: Int { case light, names, orbits, sky, demo, widget, ritual, deal }
     @State private var step: Step = .light
-    @State private var names: [String] = []
+
+    /// A name given a stable seed the moment it's typed, so the star it ignites
+    /// sits at the exact position (and wears the exact color) it will hold in
+    /// the real sky — the seed is carried through to the created `Person`.
+    private struct Light: Identifiable, Equatable {
+        let id = UUID()
+        var name: String
+        var seed: Int
+    }
+    @State private var lights: [Light] = []
+    private var names: [String] { lights.map(\.name) }
+
     @State private var currentName = ""
     @State private var orbits: [String: OrbitCadence] = [:]
     @State private var heroBreathing = false
 
-    /// Live SpriteKit sky rendered behind the reveal step.
-    @State private var revealScene = SkyScene()
+    /// One live SpriteKit sky behind every step: ambient dust + faint stars,
+    /// with the user's own stars igniting into place as they're named.
+    @State private var skyScene = SkyScene()
     /// Widget demo: which card is showing, and whether both have been seen.
     @State private var widgetCardIndex = 0
     @State private var widgetBothSeen = false
@@ -36,7 +48,13 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.01, green: 0.01, blue: 0.05).ignoresSafeArea()
+            // The living sky, behind everything. Purely decorative here —
+            // never steals a touch from the fields and buttons above it.
+            SpriteView(scene: skyScene, options: [.allowsTransparency])
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+
             switch step {
             case .light:  lightStep
             case .names:  namesStep
@@ -49,9 +67,41 @@ struct OnboardingView: View {
             }
         }
         .animation(.easeInOut(duration: 0.8), value: step)
+        .onAppear(perform: configureSky)
         .onChange(of: step) { _, new in
             analytics.track(.onboardingStep(step: new.rawValue, completed: true))
         }
+    }
+
+    // MARK: The living backdrop
+
+    /// Turn on the ambient starfield and reflect whatever sky already exists
+    /// (empty on a fresh run; the user's stars on replay).
+    private func configureSky() {
+        skyScene.showsAmbientStarfield = true
+        applySky()
+    }
+
+    /// Push the current onboarding sky into the scene. While names are being
+    /// given, the backdrop is built from the seeded `lights` so each addition
+    /// ignites in place; once there are none to show (replay), it falls back to
+    /// the real saved sky.
+    private func applySky() {
+        skyScene.apply(onboardingSnapshot())
+    }
+
+    private func onboardingSnapshot() -> SkySnapshot {
+        guard !lights.isEmpty else { return SnapshotBuilder.make(from: existingPeople) }
+        let total = lights.count
+        let stars = lights.enumerated().map { index, light -> SkySnapshot.Star in
+            let pos = SkyLayout.seededPosition(seed: light.seed, index: index, total: total)
+            return SkySnapshot.Star(
+                id: light.id, name: light.name, x: pos.x, y: pos.y,
+                luminosity: 0.72,
+                temperature: SkyLayout.temperature(colorSeed: light.seed),
+                isRemembered: false)
+        }
+        return SkySnapshot(stars: stars, lines: [])
     }
 
     // 1 — "Everyone you love is a light."
@@ -78,33 +128,27 @@ struct OnboardingView: View {
         .accessibilityHint("Tap to continue")
     }
 
-    // 2 — name the lights
+    // 2 — name the lights. Each name ignites a star in the sky behind, at the
+    // very spot it will occupy forever.
     private var namesStep: some View {
         VStack(spacing: 24) {
             Text("Who lights up your life?")
                 .font(KinType.title).foregroundStyle(.white)
-            Text("Name a few. You can always add more.")
+            Text(lights.isEmpty
+                 ? "Name a few. Watch them take their place."
+                 : "\(lights.count) up so far. Name as many as you like.")
                 .font(.footnote).foregroundStyle(.white.opacity(0.5))
-
-            HStack(spacing: 12) {
-                ForEach(Array(names.enumerated()), id: \.element) { index, _ in
-                    Image(uiImage: SkyScene.starImage(temperature: Double(index % 5) / 5))
-                        .resizable()
-                        .frame(width: 18, height: 18)
-                        .transition(.scale.combined(with: .opacity))
-                }
-            }
-            .frame(height: 22)
+                .animation(.easeInOut, value: lights.count)
 
             TextField("A name", text: $currentName)
                 .textFieldStyle(.plain)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
-                .submitLabel(names.isEmpty ? .next : .done)
+                .submitLabel(lights.isEmpty ? .next : .done)
                 .onSubmit(addName)
                 .padding(.horizontal, 60)
 
-            if !names.isEmpty {
+            if !lights.isEmpty {
                 Button("That's everyone, for now") { step = .orbits }
                     .font(.footnote).foregroundStyle(.white.opacity(0.6))
             }
@@ -115,8 +159,9 @@ struct OnboardingView: View {
     private func addName() {
         let trimmed = currentName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        withAnimation { names.append(trimmed) }
-        Haptics.shared.ignition(luminosity: min(1, 0.4 + Double(names.count) * 0.1))
+        withAnimation { lights.append(Light(name: trimmed, seed: Int.random(in: 0..<1_000_000))) }
+        applySky() // the new star ignites at its real, seeded position
+        Haptics.shared.ignition(luminosity: min(1, 0.4 + Double(lights.count) * 0.1))
         currentName = ""
     }
 
@@ -148,24 +193,22 @@ struct OnboardingView: View {
         // against "Mom" typed twice in a fresh run).
         let existing = Set(existingPeople.map { $0.name.lowercased() })
         var seen = Set<String>()
-        for name in names {
-            let key = name.lowercased()
+        for light in lights {
+            let key = light.name.lowercased()
             guard !existing.contains(key), !seen.contains(key) else { continue }
             seen.insert(key)
-            context.insert(Person(name: name, orbit: orbits[name] ?? .weekly))
+            let person = Person(name: light.name, orbit: orbits[light.name] ?? .weekly)
+            person.colorSeed = light.seed // keep the seed → same spot, same color
+            context.insert(person)
         }
-        analytics.track(.starCreated(countBucket: names.count <= 3 ? "1-3" : names.count <= 7 ? "4-7" : "8+"))
+        analytics.track(.starCreated(countBucket: lights.count <= 3 ? "1-3" : lights.count <= 7 ? "4-7" : "8+"))
         syncSiriVocabulary() // Siri learns the names as soon as they exist
     }
 
-    // 4/5 — the reveal. The real starfield, rendered behind the words.
+    // 4/5 — the reveal. No new scene: the sky they lit while naming *is* the
+    // sky revealed here. Just settle a scrim over it and name the moment.
     private var skyStep: some View {
         ZStack {
-            SpriteView(scene: revealScene, options: [.allowsTransparency])
-                .ignoresSafeArea()
-                .onAppear { revealScene.apply(SnapshotBuilder.make(from: existingPeople)) }
-                .accessibilityHidden(true)
-
             // A soft scrim so the copy stays legible over the stars.
             LinearGradient(
                 colors: [.clear, Color(red: 0.01, green: 0.01, blue: 0.05).opacity(0.8)],
