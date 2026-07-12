@@ -13,9 +13,16 @@ struct SkyView: View {
     @State private var selectedPersonID: UUID?
     @State private var showLogSheet = false
     @State private var showSettings = false
-    @State private var showAddStar = false
-    @State private var birthPosition: (x: Double, y: Double)?
+    @State private var starBirth: StarBirth?
     @State private var detailPersonID: UUID?
+
+    /// Carries an add-star request (and its optional long-press birth point)
+    /// through `.sheet(item:)`, so the sheet always reads the right position —
+    /// `.sheet(isPresented:)` could capture a stale `birthPosition`.
+    private struct StarBirth: Identifiable {
+        let id = UUID()
+        let position: (x: Double, y: Double)?
+    }
 
     var body: some View {
         ZStack {
@@ -47,11 +54,10 @@ struct SkyView: View {
             .presentationBackground(.ultraThinMaterial)
         }
         .sheet(isPresented: $showSettings) { SettingsSheet() }
-        .sheet(isPresented: $showAddStar, onDismiss: {
-            birthPosition = nil
+        .sheet(item: $starBirth, onDismiss: {
             scene.removeGhostStar() // cancelled births leave no ghost behind
-        }) {
-            StarFormSheet(editing: nil, birthPosition: birthPosition)
+        }) { birth in
+            StarFormSheet(editing: nil, birthPosition: birth.position)
         }
         .sheet(item: selectedDetailPerson, onDismiss: { scene.unfocus() }) { person in
             StarDetailView(person: person) {
@@ -147,7 +153,7 @@ struct SkyView: View {
                 .foregroundStyle(.white.opacity(0.5))
             Spacer()
             HStack(alignment: .center, spacing: 0) {
-                Button { showAddStar = true } label: {
+                Button { starBirth = StarBirth(position: nil) } label: {
                     Image(systemName: "plus.viewfinder")
                         .foregroundStyle(.white.opacity(0.5))
                         .frame(width: 44, height: 44) // Apple-minimum hit target
@@ -201,8 +207,7 @@ struct SkyView: View {
             detailPersonID = id // …as the sheet rises
         }
         scene.onLongPress = { x, y in
-            birthPosition = (x, y)
-            showAddStar = true
+            starBirth = StarBirth(position: (x, y))
         }
         scene.onStarMoved = { id, x, y in
             if let person = people.first(where: { $0.id == id }) {

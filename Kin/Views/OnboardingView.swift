@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import SpriteKit
 import StoreKit
 
 /// The first 90 seconds. Full-screen, dark, skippable at every step.
@@ -17,12 +18,18 @@ struct OnboardingView: View {
     var isReplay: Bool = false
     let onComplete: () -> Void
 
-    private enum Step: Int { case light, names, orbits, sky, demo, ritual, widget, deal }
+    private enum Step: Int { case light, names, orbits, sky, demo, widget, ritual, deal }
     @State private var step: Step = .light
     @State private var names: [String] = []
     @State private var currentName = ""
     @State private var orbits: [String: OrbitCadence] = [:]
     @State private var heroBreathing = false
+
+    /// Live SpriteKit sky rendered behind the reveal step.
+    @State private var revealScene = SkyScene()
+    /// Widget demo: which card is showing, and whether both have been seen.
+    @State private var widgetCardIndex = 0
+    @State private var widgetBothSeen = false
 
     /// The real star artwork — the same sparkle the sky renders.
     private static let heroStar = SkyScene.starImage(temperature: 0.2)
@@ -35,9 +42,9 @@ struct OnboardingView: View {
             case .names:  namesStep
             case .orbits: orbitsStep
             case .sky:    skyStep
-            case .demo:   GlowDemoView { step = .ritual }
-            case .ritual: ritualStep
+            case .demo:   GlowDemoView { step = .widget }
             case .widget: widgetStep
+            case .ritual: ritualStep
             case .deal:   dealStep
             }
         }
@@ -151,17 +158,35 @@ struct OnboardingView: View {
         syncSiriVocabulary() // Siri learns the names as soon as they exist
     }
 
-    // 4/5 — the reveal
+    // 4/5 — the reveal. The real starfield, rendered behind the words.
     private var skyStep: some View {
-        VStack(spacing: 24) {
-            Text("This is your sky on \(Date.now.formatted(.dateTime.month(.wide).day())).")
-                .font(KinType.title).foregroundStyle(.white)
-            Text(isReplay && !existingPeople.isEmpty
-                 ? "\(existingPeople.count) star\(existingPeople.count == 1 ? "" : "s"), still glowing."
-                 : "Tend it, and it glows.")
-                .font(.footnote).foregroundStyle(.white.opacity(0.5))
-            Button("Continue") { step = .demo }
-                .buttonStyle(.borderedProminent).tint(.white.opacity(0.2))
+        ZStack {
+            SpriteView(scene: revealScene, options: [.allowsTransparency])
+                .ignoresSafeArea()
+                .onAppear { revealScene.apply(SnapshotBuilder.make(from: existingPeople)) }
+                .accessibilityHidden(true)
+
+            // A soft scrim so the copy stays legible over the stars.
+            LinearGradient(
+                colors: [.clear, Color(red: 0.01, green: 0.01, blue: 0.05).opacity(0.8)],
+                startPoint: .center, endPoint: .bottom)
+                .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                Spacer()
+                Text("This is your sky on \(Date.now.formatted(.dateTime.month(.wide).day())).")
+                    .font(KinType.title).foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                Text(isReplay && !existingPeople.isEmpty
+                     ? "\(existingPeople.count) star\(existingPeople.count == 1 ? "" : "s"), still glowing."
+                     : "Tend it, and it glows.")
+                    .font(.footnote).foregroundStyle(.white.opacity(0.6))
+                Button("Continue") { step = .demo }
+                    .buttonStyle(.borderedProminent).tint(.white.opacity(0.2))
+                    .padding(.top, 4)
+            }
+            .padding()
+            .padding(.bottom, 48)
         }
     }
 
@@ -187,14 +212,20 @@ struct OnboardingView: View {
                         stargazingEnabled = true
                         analytics.track(.notificationOptIn)
                     }
-                    step = .widget
+                    advanceFromRitual()
                 }
             }
             .buttonStyle(.borderedProminent).tint(.white.opacity(0.2))
-            Button("Maybe later") { step = .widget }
+            Button("Maybe later") { advanceFromRitual() }
                 .font(.footnote).foregroundStyle(.white.opacity(0.4))
         }
         .padding()
+    }
+
+    /// Ritual is now the last stop before the pitch. Replays, which skip the
+    /// pitch entirely, finish here.
+    private func advanceFromRitual() {
+        if isReplay { onComplete() } else { step = .deal }
     }
 
     // 7 — widget invite
@@ -243,22 +274,85 @@ struct OnboardingView: View {
         }
     }
 
+    /// A single, larger star — the One Star widget — showing the brightest
+    /// person the user just named (or a demo star), with their name beneath.
+    private var oneStarPreview: some View {
+        let star = previewStars.max { $0.luminosity < $1.luminosity }
+            ?? (x: 0.5, y: 0.5, luminosity: 0.9, temperature: 0.2)
+        return ZStack {
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .fill(LinearGradient(
+                    colors: [Color(red: 0.03, green: 0.03, blue: 0.10),
+                             Color(red: 0.07, green: 0.06, blue: 0.18)],
+                    startPoint: .top, endPoint: .bottom))
+            Image(uiImage: SkyScene.starImage(temperature: star.temperature))
+                .resizable()
+                .frame(width: 60, height: 60)
+                .position(x: 79, y: 66)
+            Text("MOM")
+                .font(.system(size: 11, weight: .medium)).tracking(1.5)
+                .foregroundStyle(.white.opacity(0.6))
+                .lineLimit(1)
+                .position(x: 79, y: 120)
+        }
+        .frame(width: 158, height: 158)
+        .shadow(color: .black.opacity(0.55), radius: 22, y: 12)
+        .offset(y: widgetBobbing ? -7 : 7)
+        .animation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true),
+                   value: widgetBobbing)
+        .accessibilityHidden(true)
+    }
+
     private var widgetStep: some View {
         VStack(spacing: 28) {
-            widgetPreview
-            Text("Keep your sky on your home screen.")
+            // The two widget faces crossfade in place.
+            ZStack {
+                if widgetCardIndex == 0 {
+                    widgetPreview
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                } else {
+                    oneStarPreview
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
+            }
+            .frame(height: 176)
+            .onAppear { widgetBobbing = true }
+
+            Text(widgetCardIndex == 0
+                 ? "Keep your whole sky on your home screen."
+                 : "Or keep one star close.")
                 .font(KinType.title).foregroundStyle(.white)
                 .multilineTextAlignment(.center)
-            Text("Touch and hold your home screen, tap +, and look for Kin. Your stars, glowing at a glance.")
+                .id("title\(widgetCardIndex)")
+                .transition(.opacity)
+
+            Text(widgetCardIndex == 0
+                 ? "Touch and hold your home screen, tap +, and look for Kin. Every star, glowing at a glance."
+                 : "Add the single-star widget for someone you're tending — one light, always in view.")
                 .font(.footnote).foregroundStyle(.white.opacity(0.5))
                 .multilineTextAlignment(.center)
-            // Replays skip the pricing pitch — they already live here.
-            Button(isReplay ? "Back to your sky" : "Continue") {
-                if isReplay { onComplete() } else { step = .deal }
+                .id("body\(widgetCardIndex)")
+                .transition(.opacity)
+
+            // Held back until both widget faces have been shown.
+            if widgetBothSeen {
+                Button("Continue") { step = .ritual }
+                    .buttonStyle(.borderedProminent).tint(.white.opacity(0.2))
+                    .transition(.opacity)
             }
-            .buttonStyle(.borderedProminent).tint(.white.opacity(0.2))
         }
         .padding(32)
+        .animation(.easeInOut(duration: 1.1), value: widgetCardIndex)
+        .animation(.easeInOut(duration: 0.5), value: widgetBothSeen)
+        .task {
+            // Rotate the card every 5s; once the second face lands, the button
+            // is allowed to appear.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                widgetCardIndex = (widgetCardIndex + 1) % 2
+                if widgetCardIndex == 1 { widgetBothSeen = true }
+            }
+        }
     }
 
     // 8 — the deal, transparent

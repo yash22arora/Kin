@@ -32,6 +32,8 @@ Ideas noted during development, roughly ordered by impact-per-effort.
 ## The sky itself
 - Background gradient driven by `SkySnapshot.skyPhase` (time of day) + season;
   replace flat indigo. Same gradient in app and widget.
+  → **Full plan: `LIVING_SKY.md`** — phase-by-phase solar hue arc, moon/weather/
+  season layers, OkLCh spec, and build order. Read that when we take this up.
 - Subtle parallax on device tilt (CMMotionManager), disabled with Reduce Motion.
 - Milky Way density band in summer months.
 - Real moon phase in the header (currently decorative icon).
