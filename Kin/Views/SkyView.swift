@@ -24,6 +24,15 @@ struct SkyView: View {
         let position: (x: Double, y: Double)?
     }
 
+    /// The one gentle teach in the whole app: a single whisper by the log
+    /// button, shown until the very first moment is logged, then gone forever.
+    @AppStorage("hasLoggedFirstMoment") private var hasLoggedFirstMoment = false
+    @State private var firstLogHintReady = false
+
+    private var showsFirstLogHint: Bool {
+        !hasLoggedFirstMoment && !people.isEmpty && !showLogSheet && firstLogHintReady
+    }
+
     var body: some View {
         ZStack {
             SpriteView(scene: scene, options: [.allowsTransparency])
@@ -41,12 +50,27 @@ struct SkyView: View {
             VStack(alignment: .trailing) {
                 header
                 Spacer()
-                logButton
+                VStack(alignment: .trailing, spacing: 12) {
+                    if showsFirstLogHint {
+                        Text("Share a moment — tap +,\nand their star brightens.")
+                            .font(KinType.whisper)
+                            .foregroundStyle(.white.opacity(0.6))
+                            .multilineTextAlignment(.trailing)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: 240, alignment: .trailing)
+                            .transition(.opacity)
+                            .accessibilityHidden(true)
+                    }
+                    logButton
+                }
+                .animation(.easeInOut(duration: 0.9), value: showsFirstLogHint)
             }
             .padding()
         }
         .sheet(isPresented: $showLogSheet) {
             LogMomentSheet(preselectedPersonID: selectedPersonID) { involvedIDs in
+                // First real moment logged → retire the whisper for good.
+                hasLoggedFirstMoment = true
                 // The payoff: shooting star toward the (first) involved star.
                 if let id = involvedIDs.first { scene.runShootingStar(toward: id) }
             }
@@ -82,6 +106,12 @@ struct SkyView: View {
                 hourBucket: Calendar.current.component(.hour, from: .now),
                 starCountBucket: people.count <= 3 ? "1-3" : people.count <= 7 ? "4-7" : "8+"
             ))
+            // Let the sky settle first, then breathe the whisper in.
+            guard !hasLoggedFirstMoment, !firstLogHintReady else { return }
+            Task {
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                withAnimation(.easeInOut(duration: 0.9)) { firstLogHintReady = true }
+            }
         }
     }
 
