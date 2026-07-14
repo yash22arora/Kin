@@ -68,8 +68,16 @@ struct OnboardingView: View {
         }
         .animation(.easeInOut(duration: 0.8), value: step)
         .onAppear(perform: configureSky)
-        .onChange(of: step) { _, new in
+        .onChange(of: step) { old, new in
             analytics.track(.onboardingStep(step: new.rawValue, completed: true))
+            // Entering orbits: the backdrop sky dives away so the star on
+            // stage holds the room alone. (The return trip happens in
+            // orbitsStep's onFinished, timed with the carousel's pull-back.)
+            if new == .orbits {
+                skyScene.setOnboardingCamera(zoomedIn: true, duration: 1.0)
+            } else if old == .orbits && new != .sky {
+                skyScene.setOnboardingCamera(zoomedIn: false, duration: 0.6) // safety net
+            }
         }
     }
 
@@ -165,27 +173,27 @@ struct OnboardingView: View {
         currentName = ""
     }
 
-    // 3 — orbits, one poetic question per person
+    // 3 — orbits. The camera glides in; each person's star waits at the left
+    // edge with its orbits sweeping the full width of the screen. Choosing
+    // one turns the great unseen plate, and the next star swings into place.
     private var orbitsStep: some View {
-        let unanswered = names.first { orbits[$0] == nil }
-        return VStack(spacing: 24) {
-            if let name = unanswered {
-                Text("How often do your paths cross with \(name)?")
-                    .font(KinType.title).foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                ForEach(OrbitCadence.allCases, id: \.self) { orbit in
-                    Button(orbit.label) {
-                        orbits[name] = orbit
-                        if names.allSatisfy({ orbits[$0] != nil }) {
-                            createStars()
-                            step = .sky
-                        }
-                    }
-                    .buttonStyle(.bordered).tint(.white.opacity(0.4))
-                }
+        OrbitCarousel(
+            stars: lights.map {
+                OrbitCarousel.StarInfo(
+                    name: $0.name,
+                    temperature: SkyLayout.temperature(colorSeed: $0.seed))
+            },
+            onSelect: { name, cadence in orbits[name] = cadence },
+            onWillFinish: {
+                // Begin the camera's return while the carousel recedes —
+                // both motions read as one pull-back.
+                skyScene.setOnboardingCamera(zoomedIn: false, duration: 1.1)
+            },
+            onFinished: {
+                createStars()
+                step = .sky // the sky has brightened back; just name the moment
             }
-        }
-        .padding()
+        )
     }
 
     private func createStars() {
@@ -413,5 +421,270 @@ struct OnboardingView: View {
             .buttonStyle(.borderedProminent).tint(.white.opacity(0.2))
         }
         .padding(32)
+    }
+}
+
+// MARK: - Orbit carousel
+
+/// The orbit step as a place, not a form.
+///
+/// Every star waits on the rim of a great unseen plate whose center lies far
+/// off-screen to the left. One star at a time rests at the screen's left
+/// edge, vertically centered, its four orbits sweeping the full width of the
+/// display — the farther the ring, the rarer the crossing. Choosing an orbit
+/// turns the plate: the current star swings away along the rim while the
+/// next swings in. When the last is answered, the camera pulls back and the
+/// sky they lit is simply *there*.
+private struct OrbitCarousel: View {
+    struct StarInfo {
+        let name: String
+        let temperature: Double
+    }
+
+    let stars: [StarInfo]
+    let onSelect: (String, OrbitCadence) -> Void
+    /// Fired the moment the pull-back begins — lets the host reverse the
+    /// backdrop camera in the same breath.
+    var onWillFinish: () -> Void = {}
+    let onFinished: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var index = 0
+    @State private var plateRotation: Double = 0
+    @State private var selected: OrbitCadence?
+    @State private var chromeVisible = false   // rings, labels, question
+    @State private var transitioning = false
+    @State private var cameraScale: CGFloat = 1.24
+    @State private var cameraOffsetX: CGFloat = 70
+    @State private var cameraOpacity: Double = 0
+
+    /// Plate geometry: center far off-screen left; ~62° between neighbors is
+    /// enough that only one star is ever meaningfully on screen.
+    private let plateRadius: CGFloat = 400
+    private let stepAngle: Double = .pi * 62 / 180
+    private let cadences = OrbitCadence.allCases
+
+    var body: some View {
+        GeometryReader { geo in
+            let anchor = CGPoint(x: 28, y: geo.size.height / 2)
+            let plateCenter = CGPoint(x: anchor.x - plateRadius, y: anchor.y)
+            let maxR = geo.size.width - anchor.x - 18 // outermost ring stays on screen
+            let radii = [0.32, 0.55, 0.78, 1.0].map { maxR * CGFloat($0) }
+
+            ZStack {
+                // ── The space itself (camera-transformed) ──────────────────
+                ZStack {
+                    ringsAndLabels(anchor: anchor, radii: radii)
+                        .opacity(chromeVisible && !transitioning ? 1 : 0)
+                        .animation(.easeInOut(duration: 0.35), value: chromeVisible)
+                        .animation(.easeInOut(duration: 0.35), value: transitioning)
+
+                    // Stars riding the plate rim. Position is pure geometry of
+                    // (index, plateRotation), so one spring on plateRotation
+                    // moves the whole heaven.
+                    ForEach(Array(stars.enumerated()), id: \.offset) { i, star in
+                        let angle = Double(i) * stepAngle - plateRotation
+                        Image(uiImage: SkyScene.starImage(temperature: star.temperature))
+                            .resizable()
+                            .frame(width: 46, height: 46)
+                            .position(x: plateCenter.x + plateRadius * cos(angle),
+                                      y: plateCenter.y + plateRadius * sin(angle))
+                            .opacity(max(0, 1 - abs(angle) / (stepAngle * 0.75)))
+                    }
+                }
+                .scaleEffect(cameraScale, anchor: UnitPoint(x: 0.12, y: 0.5))
+                .offset(x: cameraOffsetX)
+                .opacity(cameraOpacity)
+
+                // ── The question (screen-fixed, above the camera) ──────────
+                VStack(spacing: 10) {
+                    if index < stars.count {
+                        Text("How often do your paths cross with \(stars[index].name)?")
+                            .font(KinType.title).foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .id(index)
+                            .transition(.opacity)
+                    }
+                    // One line beneath: the hint, replaced by the chosen
+                    // cadence's full poetic name the moment a ring is tapped.
+                    Text(selected?.label ?? "Tap an orbit — the closer, the more often.")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(selected == nil ? 0.45 : 0.85))
+                        .id(selected?.rawValue ?? "hint")
+                        .transition(.opacity)
+                }
+                .padding(.horizontal, 32)
+                .padding(.top, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .opacity(chromeVisible && !transitioning ? 1 : 0)
+                .animation(.easeInOut(duration: 0.35), value: transitioning)
+                .animation(.easeInOut(duration: 0.25), value: selected)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { location in
+                handleTap(at: location, anchor: anchor, radii: radii)
+            }
+            .onAppear { enter() }
+        }
+        .accessibilityRepresentation { accessibleOrbits }
+    }
+
+    // MARK: Rings
+
+    private func ringsAndLabels(anchor: CGPoint, radii: [CGFloat]) -> some View {
+        ZStack {
+            ForEach(Array(cadences.enumerated()), id: \.offset) { i, cadence in
+                let r = radii[i]
+                let isChosen = selected == cadence
+
+                Circle()
+                    .strokeBorder(.white.opacity(isChosen ? 0.85 : 0.20),
+                                  lineWidth: isChosen ? 1.6 : 0.8)
+                    .frame(width: r * 2, height: r * 2)
+                    .position(anchor)
+
+                // Short label riding its ring, staggered above/below the
+                // horizontal so four capsules never crowd one axis.
+                let labelAngle = Double(i % 2 == 0 ? -34 : 34) * .pi / 180
+                Text(cadence.shortLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(isChosen ? 0.95 : (selected == nil ? 0.65 : 0.3)))
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(.black.opacity(0.3), in: Capsule())
+                    .position(x: anchor.x + r * CGFloat(cos(labelAngle)),
+                              y: anchor.y + r * CGFloat(sin(labelAngle)))
+            }
+
+            // The moon settles onto the chosen ring.
+            if let selected, let i = cadences.firstIndex(of: selected) {
+                Circle().fill(.white).frame(width: 8, height: 8)
+                    .shadow(color: .white.opacity(0.8), radius: 5)
+                    .position(x: anchor.x + radii[i], y: anchor.y)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    // MARK: Interaction
+
+    private func handleTap(at location: CGPoint, anchor: CGPoint, radii: [CGFloat]) {
+        guard chromeVisible, !transitioning, selected == nil, index < stars.count else { return }
+        // Distance from the star = which orbit. Forgiving by construction:
+        // anywhere on screen resolves to the nearest ring, within a band.
+        let d = hypot(location.x - anchor.x, location.y - anchor.y)
+        guard let nearest = radii.enumerated().min(by: { abs($0.1 - d) < abs($1.1 - d) }),
+              abs(nearest.1 - d) < 48 else { return }
+        choose(cadences[nearest.0])
+    }
+
+    private func choose(_ cadence: OrbitCadence) {
+        withAnimation(.easeOut(duration: 0.3)) { selected = cadence }
+        Haptics.shared.ignition(luminosity: 0.7)
+        onSelect(stars[index].name, cadence)
+        Task {
+            try? await Task.sleep(nanoseconds: 850_000_000) // let the choice land
+            if index >= stars.count - 1 {
+                exitAndFinish()
+            } else {
+                advance()
+            }
+        }
+    }
+
+    /// Turn the plate: chrome fades, the rim rotates one notch, the next
+    /// star swings up into the anchor, chrome returns.
+    private func advance() {
+        transitioning = true
+        if reduceMotion {
+            plateRotation += stepAngle
+            index += 1
+            selected = nil
+            transitioning = false
+            return
+        }
+        withAnimation(.spring(response: 0.95, dampingFraction: 0.86)) {
+            plateRotation += stepAngle
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 750_000_000)
+            index += 1
+            selected = nil
+            transitioning = false
+        }
+    }
+
+    // MARK: Camera
+
+    /// The glide in: space scales down from 1.24 while panning left, and the
+    /// first star sweeps up the rim into its place — arriving, not appearing.
+    private func enter() {
+        if reduceMotion {
+            cameraScale = 1; cameraOffsetX = 0; cameraOpacity = 1
+            plateRotation = 0; chromeVisible = true
+            return
+        }
+        plateRotation = -stepAngle * 0.45
+        withAnimation(.easeOut(duration: 1.0)) {
+            cameraOpacity = 1; cameraScale = 1; cameraOffsetX = 0
+        }
+        withAnimation(.spring(response: 1.05, dampingFraction: 0.85).delay(0.15)) {
+            plateRotation = 0
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            chromeVisible = true
+        }
+    }
+
+    /// The pull back: rings dissolve, space recedes, and what's left when we
+    /// let go is the sky itself (the living backdrop behind this view).
+    private func exitAndFinish() {
+        if reduceMotion {
+            onWillFinish()
+            onFinished()
+            return
+        }
+        // Two beats, strictly in sequence: the orbit scene leaves the stage
+        // completely… then the sky returns to an empty room. No overlap —
+        // the beat of darkness between them is what makes the reveal land.
+        chromeVisible = false
+        withAnimation(.easeInOut(duration: 0.8).delay(0.05)) {
+            cameraScale = 0.5
+            cameraOpacity = 0
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 950_000_000)  // scene fully gone
+            onWillFinish()                                    // now the sky brightens back
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // let it mostly land
+            onFinished()
+        }
+    }
+
+    // MARK: Accessibility
+
+    /// VoiceOver skips the theater: one question, four buttons.
+    private var accessibleOrbits: some View {
+        VStack {
+            if index < stars.count {
+                Text("How often do your paths cross with \(stars[index].name)?")
+                ForEach(cadences, id: \.self) { cadence in
+                    Button(cadence.label) { choose(cadence) }
+                }
+            }
+        }
+    }
+}
+
+private extension OrbitCadence {
+    /// Compact ring labels; the full poetic label confirms under the question.
+    var shortLabel: String {
+        switch self {
+        case .mostDays:       return "Most days"
+        case .weekly:         return "Most weeks"
+        case .everyFewMonths: return "Some seasons"
+        case .rarely:         return "Rarely"
+        }
     }
 }

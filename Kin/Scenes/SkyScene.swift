@@ -167,6 +167,29 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
         }
     }
 
+    /// Onboarding's orbit step: the camera dives past the sky into a quieter
+    /// space — push in, drift right, dim the stars to a whisper so the one
+    /// star on stage (drawn by SwiftUI above) holds the room alone.
+    /// `zoomedIn: false` reverses it, and *that* is the sky reveal: the
+    /// heavens brightening back to meet you.
+    func setOnboardingCamera(zoomedIn: Bool, duration: TimeInterval = 1.0) {
+        let d = reduceMotion ? 0.01 : duration
+
+        let scale: CGFloat = zoomedIn ? 0.7 : 1.0
+        let target = CGPoint(x: size.width * (zoomedIn ? 0.64 : 0.5), y: size.height / 2)
+        let move = SKAction.move(to: target, duration: d)
+        move.timingMode = .easeInEaseOut
+        let zoom = SKAction.scale(to: scale, duration: d)
+        zoom.timingMode = .easeInEaseOut
+        cameraNode.removeAction(forKey: "focus")
+        cameraNode.run(.group([move, zoom]), withKey: "focus")
+
+        // Layer-level dim multiplies under each star's own scintillation,
+        // so nothing fights: the sky just recedes into atmosphere.
+        starLayer.run(.fadeAlpha(to: zoomedIn ? 0.10 : 1.0, duration: d))
+        dustLayer.run(.fadeAlpha(to: zoomedIn ? 0.45 : 1.0, duration: d))
+    }
+
     /// Keep the zoomed viewport inside the world so the dust never runs out.
     private func clampCamera(_ p: CGPoint, zoom: CGFloat) -> CGPoint {
         let halfW = size.width * zoom / 2
