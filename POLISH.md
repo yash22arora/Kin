@@ -1,9 +1,10 @@
 # Kin — Visual Polish Backlog (post-functionality)
 
-## Next up: onboarding upgrades (agreed, not yet built)
-- Live starfield (dust + faint stars) behind ALL onboarding steps
-- Names igniting into their real seeded sky positions as they're typed
-- Orbit step goes visual: tappable orbit rings around the person's star
+## Next up: onboarding upgrades
+- ✅ Live starfield (dust + faint stars) behind ALL onboarding steps
+- ✅ Names igniting into their real seeded sky positions as they're typed
+- ✅ Orbit step: left-anchored star, full-width rings, plate carousel between
+  stars, backdrop camera dive/return, sequenced (no-overlap) sky reveal
 - Haptic crescendo: warmer haptic per step, peaking at the sky reveal
 - Line-by-line text reveal for poetic headlines
 

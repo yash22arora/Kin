@@ -31,7 +31,13 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        Group {
+        ZStack {
+            // The night, always underneath. Kills the white flash during
+            // view swaps (SpriteView takes a frame to draw its first sky)
+            // and seams perfectly with the launch screen's background.
+            Color(red: 0.031, green: 0.031, blue: 0.102)
+                .ignoresSafeArea()
+
             if !hasCompletedOnboarding {
                 OnboardingView { hasCompletedOnboarding = true }
             } else if faceIDLock && !unlockedThisSession {

@@ -35,6 +35,11 @@ struct SkyView: View {
 
     var body: some View {
         ZStack {
+            // Under the scene: the same night color, so the SpriteView's
+            // first-frame gap is invisible.
+            Color(red: 0.031, green: 0.031, blue: 0.102)
+                .ignoresSafeArea()
+
             SpriteView(scene: scene, options: [.allowsTransparency])
                 .ignoresSafeArea()
                 .onAppear { configureScene() }
