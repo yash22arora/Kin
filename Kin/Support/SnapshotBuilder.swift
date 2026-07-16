@@ -7,7 +7,7 @@ enum SnapshotBuilder {
 
     static func make(from people: [Person]) -> SkySnapshot {
         let active = people
-            .filter { $0.state != .released }
+            .filter { $0.state != .released && !$0.isDormant } // resting stars stay unseen
             .sorted { $0.createdAt < $1.createdAt }
 
         let stars = active.enumerated().map { index, person -> SkySnapshot.Star in

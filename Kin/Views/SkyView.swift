@@ -5,7 +5,7 @@ import WidgetKit
 
 /// The home canvas. No tab bar — one spatial view with sheets.
 struct SkyView: View {
-    @Query(filter: #Predicate<Person> { $0.stateRaw != "released" })
+    @Query(filter: #Predicate<Person> { $0.stateRaw != "released" && !$0.isDormant })
     private var people: [Person]
     @Environment(\.analytics) private var analytics
 

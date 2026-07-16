@@ -34,7 +34,7 @@ struct PersonEntityQuery: EntityQuery, EntityStringQuery {
     @MainActor
     private func activePeople() throws -> [Person] {
         let descriptor = FetchDescriptor<Person>(
-            predicate: #Predicate { $0.stateRaw != "released" },
+            predicate: #Predicate { $0.stateRaw != "released" && !$0.isDormant },
             sortBy: [SortDescriptor(\.name)]
         )
         return try KinModelContainer.shared.mainContext.fetch(descriptor)
@@ -215,6 +215,19 @@ func syncSiriVocabulary() {
 func publishSky(context: ModelContext) {
     let descriptor = FetchDescriptor<Person>(predicate: #Predicate { $0.stateRaw != "released" })
     guard let people = try? context.fetch(descriptor) else { return }
-    SkySnapshotStore.save(SnapshotBuilder.make(from: people))
+    SkySnapshotStore.save(SnapshotBuilder.make(from: people)) // builder skips dormant
     WidgetCenter.shared.reloadAllTimelines()
+}
+
+/// The promise kept: unlocking wakes every resting star, moments intact.
+@MainActor
+func restoreDormantStars() {
+    let context = KinModelContainer.shared.mainContext
+    let descriptor = FetchDescriptor<Person>(predicate: #Predicate { $0.isDormant })
+    guard let sleeping = try? context.fetch(descriptor), !sleeping.isEmpty else { return }
+    for person in sleeping { person.isDormant = false }
+    try? context.save()
+    AnalyticsFactory.shared.track(.starsRestored(count: sleeping.count))
+    publishSky(context: context)
+    syncSiriVocabulary()
 }

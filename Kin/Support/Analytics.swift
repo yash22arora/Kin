@@ -17,6 +17,8 @@ enum AnalyticsEvent {
     case notificationOptIn
     case momentEdited
     case momentDeleted
+    case starsRested(count: Int)
+    case starsRestored(count: Int)
 
     var name: String {
         switch self {
@@ -32,6 +34,8 @@ enum AnalyticsEvent {
         case .notificationOptIn: "notification_opt_in"
         case .momentEdited: "moment_edited"
         case .momentDeleted: "moment_deleted"
+        case .starsRested: "stars_rested"
+        case .starsRestored: "stars_restored"
         }
     }
 }
@@ -53,6 +57,8 @@ extension AnalyticsEvent {
             return ["kind": kind]
         case .paywallViewed(let daySinceInstall):
             return ["daySinceInstall": "\(daySinceInstall)"]
+        case .starsRested(let count), .starsRestored(let count):
+            return ["count": "\(count)"]
         default:
             return [:]
         }

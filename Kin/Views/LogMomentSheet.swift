@@ -97,7 +97,7 @@ struct LogMomentSheet: View {
     private var peopleChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(people.filter { $0.state == .active }) { person in
+                ForEach(people.filter { $0.state == .active && !$0.isDormant }) { person in
                     personChip(person)
                 }
             }

@@ -48,6 +48,7 @@
 
 /* Begin PBXFileReference section */
 		A4D380BF300006EA00B8C00B /* Kin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kin.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A4D381F63000FACE00B8C00B /* Kin.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Kin.storekit; sourceTree = "<group>"; };
 		A4D38128300007F000B8C00B /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
 		A4D38129300007F000B8C00B /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		A4D38169300008E300B8C00B /* KinWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KinWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -142,6 +143,7 @@
 			isa = PBXGroup;
 			children = (
 				A4D38123300007F000B8C00B /* Kin */,
+				A4D381F63000FACE00B8C00B /* Kin.storekit */,
 				A4D38128300007F000B8C00B /* project.yml */,
 				A4D38129300007F000B8C00B /* README.md */,
 				A4D3816F300008E300B8C00B /* KinWidget */,

@@ -13,6 +13,11 @@ public final class Person {
     public var stateRaw: String = StarState.active.rawValue
     public var createdAt: Date = Date()
 
+    /// Free tier after the trial: stars beyond the limit *rest* — hidden
+    /// from every surface (sky, widgets, Siri, logging) but never deleted.
+    /// Unlocking wakes them all. Moments, positions, everything survives.
+    public var isDormant: Bool = false
+
     @Relationship(deleteRule: .nullify, inverse: \Moment.people)
     public var moments: [Moment]? = []
 

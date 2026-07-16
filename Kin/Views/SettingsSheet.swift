@@ -6,6 +6,9 @@ struct SettingsSheet: View {
     @AppStorage("stargazingEnabled") private var stargazingEnabled = false
     @AppStorage("faceIDLock") private var faceIDLock = false
 
+    @Query(filter: #Predicate<Person> { $0.isDormant })
+    private var restingStars: [Person]
+
     let store = Store.shared
 
     var body: some View {
@@ -46,6 +49,11 @@ struct SettingsSheet: View {
                         Label("Unlocked, forever", systemImage: "sparkles")
                             .foregroundStyle(.white.opacity(0.7))
                     } else {
+                        if !restingStars.isEmpty {
+                            Text("\(restingStars.count) star\(restingStars.count == 1 ? " is" : "s are") resting — every moment kept. Unlock and they return.")
+                                .font(.footnote)
+                                .foregroundStyle(.white.opacity(0.6))
+                        }
                         NavigationLink("Unlock Kin") { PaywallView() }
                         Button("Restore purchase") { Task { await store.restore() } }
                     }

@@ -39,8 +39,20 @@ final class Store {
         }
     }
 
+    #if DEBUG
+    /// Flip to true to mimic an expired trial (drives the TrialEndedView
+    /// flow when more than 3 stars exist). Debug builds only.
+    static let debugForceTrialEnded = false
+    #endif
+
     var trialEndsAt: Date { firstLaunch.addingTimeInterval(Double(Self.trialDays) * 86_400) }
-    var isTrialActive: Bool { Date() < trialEndsAt }
+
+    var isTrialActive: Bool {
+        #if DEBUG
+        if Self.debugForceTrialEnded { return false }
+        #endif
+        return Date() < trialEndsAt
+    }
     var hasFullAccess: Bool { isUnlocked || isTrialActive }
 
     /// The single gate in the app: adding a star beyond the free tier.
