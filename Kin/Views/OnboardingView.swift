@@ -325,11 +325,22 @@ struct OnboardingView: View {
         }
     }
 
-    /// A single, larger star — the One Star widget — showing the brightest
-    /// person the user just named (or a demo star), with their name beneath.
+    /// The first star the user created — name and color both real, so the
+    /// widget pitch is personally theirs from the first second.
+    private var firstStar: (name: String, temperature: Double) {
+        if let light = lights.first {
+            return (light.name, SkyLayout.temperature(colorSeed: light.seed))
+        }
+        if let person = existingPeople.min(by: { $0.createdAt < $1.createdAt }) {
+            return (person.name, SkyLayout.temperature(colorSeed: person.colorSeed))
+        }
+        return ("Mom", 0.2)
+    }
+
+    /// A single, larger star — the One Star widget — showing the first
+    /// person the user named, with their name beneath.
     private var oneStarPreview: some View {
-        let star = previewStars.max { $0.luminosity < $1.luminosity }
-            ?? (x: 0.5, y: 0.5, luminosity: 0.9, temperature: 0.2)
+        let star = firstStar
         return ZStack {
             RoundedRectangle(cornerRadius: 32, style: .continuous)
                 .fill(LinearGradient(
@@ -340,7 +351,7 @@ struct OnboardingView: View {
                 .resizable()
                 .frame(width: 60, height: 60)
                 .position(x: 79, y: 66)
-            Text("MOM")
+            Text(star.name.uppercased())
                 .font(.system(size: 11, weight: .medium)).tracking(1.5)
                 .foregroundStyle(.white.opacity(0.6))
                 .lineLimit(1)

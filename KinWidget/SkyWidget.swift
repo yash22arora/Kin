@@ -101,17 +101,27 @@ enum WidgetSky {
             )
         )
 
-        // Diffraction cross — brightest stars only, hairline, under the core.
+        // Diffraction cross — brightest stars only, under the core.
+        // Sword-thin arms: hairline base, straight taper to a point at the
+        // tip. Mirrors SkyScene.taperedCrossPath — keep in sync.
         if lum > 0.55 {
             let crossAlpha = (lum - 0.55) / 0.45 * 0.30
             let arm = r * 2.6
+            let baseW = 0.8 * sizeScale
             var cross = Path()
-            cross.move(to: CGPoint(x: center.x, y: center.y - arm))
-            cross.addLine(to: CGPoint(x: center.x, y: center.y + arm))
-            cross.move(to: CGPoint(x: center.x - arm, y: center.y))
-            cross.addLine(to: CGPoint(x: center.x + arm, y: center.y))
-            context.stroke(cross, with: .color(.white.opacity(crossAlpha)),
-                           style: .init(lineWidth: 0.7, lineCap: .round))
+            for k in 0..<4 {
+                let angle = Double(k) * .pi / 2
+                let dir = CGPoint(x: cos(angle), y: sin(angle))
+                let perp = CGPoint(x: -sin(angle), y: cos(angle))
+                cross.move(to: CGPoint(x: center.x + perp.x * baseW / 2,
+                                       y: center.y + perp.y * baseW / 2))
+                cross.addLine(to: CGPoint(x: center.x + dir.x * arm,
+                                          y: center.y + dir.y * arm))
+                cross.addLine(to: CGPoint(x: center.x - perp.x * baseW / 2,
+                                          y: center.y - perp.y * baseW / 2))
+                cross.closeSubpath()
+            }
+            context.fill(cross, with: .color(.white.opacity(crossAlpha)))
         }
 
         // The point of light: white-hot center → tinted falloff → nothing.

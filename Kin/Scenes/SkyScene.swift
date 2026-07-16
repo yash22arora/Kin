@@ -590,17 +590,11 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
             // Faint crosshair beneath…
             c.saveGState()
             c.translateBy(x: center, y: center)
-            let arm: CGFloat = 38
             c.setShadow(offset: .zero, blur: 1.5,
                         color: UIColor.white.withAlphaComponent(0.4).cgColor)
-            c.setStrokeColor(UIColor.white.withAlphaComponent(0.4).cgColor)
-            c.setLineWidth(1.8)
-            c.setLineCap(.round)
-            c.move(to: CGPoint(x: 0, y: -arm))
-            c.addLine(to: CGPoint(x: 0, y: arm))
-            c.move(to: CGPoint(x: -arm, y: 0))
-            c.addLine(to: CGPoint(x: arm, y: 0))
-            c.strokePath()
+            c.addPath(taperedCrossPath(arm: 38, baseWidth: 1.8))
+            c.setFillColor(UIColor.white.withAlphaComponent(0.4).cgColor)
+            c.fillPath()
             c.restoreGState()
             // …the point of light on top.
             pointImage(temperature: temperature, px: px)
@@ -870,23 +864,33 @@ extension SkyScene {
         let image = renderer.image { ctx in
             let c = ctx.cgContext
             c.translateBy(x: center, y: center)
-            // True crosshair: two straight stroked hairlines, exactly the
-            // widget's geometry. 2.2px here ≈ 0.73pt at 44pt display size.
-            let arm: CGFloat = 60
+            // Sword-thin arms: constant hairline at the base (2.2px ≈ 0.73pt
+            // at display size), tapering to a point at each tip.
             c.setShadow(offset: .zero, blur: 1.5,
                         color: UIColor.white.withAlphaComponent(0.5).cgColor)
-            c.setStrokeColor(UIColor.white.withAlphaComponent(0.9).cgColor)
-            c.setLineWidth(2.2)
-            c.setLineCap(.round)
-            c.move(to: CGPoint(x: 0, y: -arm))
-            c.addLine(to: CGPoint(x: 0, y: arm))
-            c.move(to: CGPoint(x: -arm, y: 0))
-            c.addLine(to: CGPoint(x: arm, y: 0))
-            c.strokePath()
+            c.addPath(taperedCrossPath(arm: 60, baseWidth: 2.2))
+            c.setFillColor(UIColor.white.withAlphaComponent(0.9).cgColor)
+            c.fillPath()
         }
         let texture = SKTexture(image: image)
         crossCache = texture
         return texture
+    }
+
+    /// Four arms like very thin swords: full width at the star, a straight
+    /// taper to a point at the tip. Never broader than the base.
+    static func taperedCrossPath(arm: CGFloat, baseWidth: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        for k in 0..<4 {
+            let angle = CGFloat(k) * .pi / 2
+            let dir = CGPoint(x: cos(angle), y: sin(angle))
+            let perp = CGPoint(x: -sin(angle), y: cos(angle))
+            path.move(to: CGPoint(x: perp.x * baseWidth / 2, y: perp.y * baseWidth / 2))
+            path.addLine(to: CGPoint(x: dir.x * arm, y: dir.y * arm))
+            path.addLine(to: CGPoint(x: -perp.x * baseWidth / 2, y: -perp.y * baseWidth / 2))
+            path.closeSubpath()
+        }
+        return path
     }
 }
 
