@@ -64,8 +64,12 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             // Re-lock when the app goes to background.
             if phase == .background { unlockedThisSession = false }
-            // Trial may have lapsed while the app slept.
-            if phase == .active { foregroundTick.toggle() }
+            // Trial may have lapsed while the app slept — and entitlements
+            // may have changed (purchase on another device, refund).
+            if phase == .active {
+                foregroundTick.toggle()
+                Task { await store.refreshEntitlements() }
+            }
         }
         .onChange(of: store.isUnlocked) { _, unlocked in
             if unlocked { restoreDormantStars() } // the promise, kept instantly

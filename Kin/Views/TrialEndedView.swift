@@ -17,6 +17,8 @@ struct TrialEndedView: View {
     let store = Store.shared
     @State private var keptIDs: Set<UUID> = []
     @State private var purchasing = false
+    @State private var restoring = false
+    @State private var restoreResult: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -58,9 +60,39 @@ struct TrialEndedView: View {
             .padding(.horizontal, 24)
             .padding(.top, 24)
 
-            Button("Restore purchase") { Task { await store.restore() } }
-                .font(.footnote).foregroundStyle(.white.opacity(0.45))
-                .padding(.top, 10)
+            if store.lifetimeProduct == nil {
+                Text("Can't reach the App Store right now. Your sky is unaffected — try again later.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.45))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .padding(.top, 8)
+                    .task { await store.loadProducts() } // retry when this shows
+            }
+
+            Button(restoring ? "Checking…" : "Restore purchase") {
+                restoring = true
+                restoreResult = nil
+                Task {
+                    await store.restore()
+                    restoring = false
+                    // On success the gate clears on its own; this line only
+                    // ever lingers when there was nothing to find.
+                    restoreResult = store.isUnlocked
+                        ? "Welcome back — relighting your sky."
+                        : "No previous purchase found."
+                }
+            }
+            .font(.footnote).foregroundStyle(.white.opacity(0.45))
+            .disabled(restoring)
+            .padding(.top, 10)
+
+            if let restoreResult {
+                Text(restoreResult)
+                    .font(.caption).foregroundStyle(.white.opacity(0.55))
+                    .padding(.top, 4)
+                    .transition(.opacity)
+            }
 
             HStack {
                 Rectangle().fill(.white.opacity(0.12)).frame(height: 0.5)

@@ -50,6 +50,17 @@ struct PaywallView: View {
             .tint(.white.opacity(0.2))
             .disabled(purchasing || store.lifetimeProduct == nil)
 
+            if store.lifetimeProduct == nil {
+                // Real cause in production: offline / App Store hiccup.
+                // In debug it means the app wasn't launched via Xcode,
+                // so the local StoreKit test store isn't attached.
+                Text("Can't reach the App Store right now. Your sky is unaffected — try again later.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.45))
+                    .multilineTextAlignment(.center)
+                    .task { await store.loadProducts() } // retry when this shows
+            }
+
             Button("Restore purchase") {
                 Task { await store.restore(); if store.isUnlocked { dismiss() } }
             }

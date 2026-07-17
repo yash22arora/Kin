@@ -12,8 +12,17 @@ final class Store {
     static let trialDays = 7
 
     private(set) var lifetimeProduct: Product?
-    private(set) var isUnlocked = false
+    /// Seeded from the last verified check so cold launches don't flash the
+    /// trial gate while StoreKit wakes up. The async entitlement check runs
+    /// at every launch/foreground and corrects this if it's ever wrong.
+    private(set) var isUnlocked = UserDefaults.standard.bool(forKey: "isUnlocked")
     private var transactionListener: Task<Void, Never>?
+
+    @MainActor
+    private func setUnlocked(_ value: Bool) {
+        isUnlocked = value
+        UserDefaults.standard.set(value, forKey: "isUnlocked")
+    }
 
     // MARK: Trial
     // Anchored to AppTransaction.originalPurchaseDate (survives reinstalls);
@@ -29,6 +38,11 @@ final class Store {
 
     @MainActor
     private func anchorTrialToAppTransaction() async {
+        // The local StoreKit test environment reports originalPurchaseDate
+        // as the day the test store first saw this app — days in the past —
+        // which silently expires every fresh debug install. The anchor only
+        // means something against the real App Store; debug builds skip it.
+        #if !DEBUG
         guard let result = try? await AppTransaction.shared,
               case .verified(let transaction) = result else { return }
         let original = transaction.originalPurchaseDate
@@ -37,6 +51,7 @@ final class Store {
             firstLaunch = original
             UserDefaults.standard.set(original, forKey: "firstLaunch")
         }
+        #endif
     }
 
     #if DEBUG
@@ -85,14 +100,15 @@ final class Store {
 
     @MainActor
     func refreshEntitlements() async {
+        var unlocked = false
         for await entitlement in Transaction.currentEntitlements {
             if case .verified(let transaction) = entitlement,
                transaction.productID == Self.lifetimeProductID {
-                isUnlocked = true
-                return
+                unlocked = true
+                break
             }
         }
-        isUnlocked = false
+        setUnlocked(unlocked)
     }
 
     @MainActor
@@ -102,7 +118,7 @@ final class Store {
         guard let result = try? await product.purchase() else { return false }
         if case .success(.verified(let transaction)) = result {
             await transaction.finish()
-            isUnlocked = true
+            setUnlocked(true)
             return true
         }
         return false
