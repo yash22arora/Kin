@@ -14,6 +14,17 @@ struct SettingsSheet: View {
                 store: UserDefaults(suiteName: KinShared.appGroupID))
     private var skyMoodRaw = SkyPhaseVariant.auto.rawValue
 
+    #if DEBUG
+    /// Debug sky clock: hours 0–24, -1 = follow the real clock.
+    @AppStorage("debugSkyHour") private var debugSkyHour: Double = -1
+
+    private var debugTimeLabel: String {
+        let h = Int(debugSkyHour)
+        let m = Int((debugSkyHour - Double(h)) * 60)
+        return String(format: "%02d:%02d", min(h, 23), m)
+    }
+    #endif
+
     /// LOW / MIDDLE / HIGH detents. The slider rests anywhere; these only
     /// speak through the haptics (and the brightening labels) when crossed.
     private let dustDetents: [Double] = [1.0, 1.75, 2.5]
@@ -105,6 +116,26 @@ struct SettingsSheet: View {
                             .padding(.top, 2)
                     }
                 }
+                #if DEBUG
+                Section("Debug — sky clock") {
+                    if debugSkyHour >= 0 {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Slider(value: $debugSkyHour, in: 0...24)
+                            HStack {
+                                Text(debugTimeLabel)
+                                Spacer()
+                                Text(String(format: "sun %+.1f°",
+                                            SkyPalette.solarAltitude(hour: debugSkyHour, at: .now)))
+                            }
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.6))
+                        }
+                        Button("Follow the real clock") { debugSkyHour = -1 }
+                    } else {
+                        Button("Override time of day") { debugSkyHour = 18.5 }
+                    }
+                }
+                #endif
                 Section("Privacy") {
                     Toggle("Lock with Face ID", isOn: $faceIDLock)
                     NavigationLink("Export my sky") { ExportView() }

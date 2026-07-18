@@ -63,17 +63,33 @@ public enum SkyPalette {
 
     // MARK: Public API
 
+    #if DEBUG
+    /// Settings' debug clock ("debugSkyHour" in standard defaults, hours
+    /// 0–24; -1 = off). Lets the hues be auditioned without waiting for the
+    /// planet. Debug builds only; applies to Auto mood, in-app only.
+    static var debugHour: Double? {
+        let value = UserDefaults.standard.double(forKey: "debugSkyHour")
+        return value >= 0 ? min(value, 24) : nil
+    }
+    #endif
+
     /// Three vertical stops — [zenith, mid, horizon] — for the given moment
     /// and mood. This is the single source of truth for the sky's color.
     public static func stops(at date: Date = Date(),
                              variant: SkyPhaseVariant = .auto) -> [RGB] {
-        let altitude: Double
-        let morning: Bool
+        var altitude: Double
+        var morning: Bool
         if let pinned = variant.pinned {
             (altitude, morning) = pinned
         } else {
             altitude = solarAltitude(at: date)
             morning = isMorning(at: date)
+            #if DEBUG
+            if let hour = Self.debugHour {
+                altitude = solarAltitude(hour: hour, at: date)
+                morning = hour < 12.5
+            }
+            #endif
         }
         let stops = interpolatedStops(altitude: altitude)
         let adjusted = morning ? stops.map(morningShift) : stops
@@ -86,10 +102,16 @@ public enum SkyPalette {
     /// assuming mid-latitude (37°). Wrong by a few degrees, right in feel —
     /// LIVING_SKY.md's graceful-degradation rule.
     static func solarAltitude(at date: Date, calendar: Calendar = .current) -> Double {
-        let day = Double(calendar.ordinality(of: .day, in: .year, for: date) ?? 172)
-        let declination = -23.44 * cos(2 * .pi * (day + 10) / 365) * .pi / 180
         let hour = Double(calendar.component(.hour, from: date))
             + Double(calendar.component(.minute, from: date)) / 60
+        return solarAltitude(hour: hour, at: date, calendar: calendar)
+    }
+
+    /// Same model with the clock decoupled — powers the debug time slider.
+    static func solarAltitude(hour: Double, at date: Date,
+                              calendar: Calendar = .current) -> Double {
+        let day = Double(calendar.ordinality(of: .day, in: .year, for: date) ?? 172)
+        let declination = -23.44 * cos(2 * .pi * (day + 10) / 365) * .pi / 180
         let hourAngle = (hour - 12.5) * 15 * .pi / 180 // solar noon ≈ 12:30
         let latitude = 37.0 * .pi / 180
         let sinAlt = sin(latitude) * sin(declination)

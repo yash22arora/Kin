@@ -21,6 +21,9 @@ struct SkyView: View {
     @AppStorage(SkyPalette.variantKey,
                 store: UserDefaults(suiteName: KinShared.appGroupID))
     private var skyMoodRaw = SkyPhaseVariant.auto.rawValue
+    #if DEBUG
+    @AppStorage("debugSkyHour") private var debugSkyHour: Double = -1
+    #endif
 
     /// Carries an add-star request (and its optional long-press birth point)
     /// through `.sheet(item:)`, so the sheet always reads the right position —
@@ -119,6 +122,12 @@ struct SkyView: View {
         .onChange(of: skyMoodRaw) { _, _ in
             scene.refreshBackground()
         }
+        #if DEBUG
+        // Debug sky clock → repaint live while scrubbing.
+        .onChange(of: debugSkyHour) { _, _ in
+            scene.refreshBackground()
+        }
+        #endif
         .onOpenURL(perform: handleDeepLink)
         .onAppear {
             analytics.track(.skyOpened(
