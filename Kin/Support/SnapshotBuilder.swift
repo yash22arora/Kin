@@ -11,9 +11,18 @@ enum SnapshotBuilder {
             .sorted { $0.createdAt < $1.createdAt }
 
         let stars = active.enumerated().map { index, person -> SkySnapshot.Star in
-            let pos: (x: Double, y: Double) = person.positionX >= 0
-                ? (person.positionX, person.positionY)
-                : SkyLayout.seededPosition(seed: person.colorSeed, index: index, total: active.count)
+            // A star without a home gets one NOW, and it's written down —
+            // seeded positions depend on (index, total), which drift as the
+            // sky changes, so deriving twice gives two different skies.
+            // Materializing makes position a stored fact: stable across
+            // launches, star additions, and export/import round-trips.
+            if person.positionX < 0 {
+                let seeded = SkyLayout.seededPosition(
+                    seed: person.colorSeed, index: index, total: active.count)
+                person.positionX = seeded.x
+                person.positionY = seeded.y
+            }
+            let pos = (x: person.positionX, y: person.positionY)
             return SkySnapshot.Star(
                 id: person.id,
                 name: person.name,

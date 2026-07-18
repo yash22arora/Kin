@@ -207,12 +207,21 @@ struct OnboardingView: View {
         // against "Mom" typed twice in a fresh run).
         let existing = Set(existingPeople.map { $0.name.lowercased() })
         var seen = Set<String>()
-        for light in lights {
+        for (index, light) in lights.enumerated() {
             let key = light.name.lowercased()
             guard !existing.contains(key), !seen.contains(key) else { continue }
             seen.insert(key)
             let person = Person(name: light.name, orbit: orbits[light.name] ?? .weekly)
-            person.colorSeed = light.seed // keep the seed → same spot, same color
+            person.colorSeed = light.seed // same color…
+            // …and the exact spot it ignited during naming, written down at
+            // birth (same formula the onboarding backdrop used). Stagger
+            // createdAt so sort order is deterministic despite same-second
+            // creation.
+            let pos = SkyLayout.seededPosition(seed: light.seed,
+                                               index: index, total: lights.count)
+            person.positionX = pos.x
+            person.positionY = pos.y
+            person.createdAt = Date().addingTimeInterval(Double(index) * 0.001)
             context.insert(person)
         }
         analytics.track(.starCreated(countBucket: lights.count <= 3 ? "1-3" : lights.count <= 7 ? "4-7" : "8+"))

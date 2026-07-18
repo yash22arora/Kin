@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import WidgetKit
+import UniformTypeIdentifiers
 
 struct SettingsSheet: View {
     @AppStorage("stargazingHour") private var stargazingHour = 21
@@ -42,6 +43,11 @@ struct SettingsSheet: View {
 
     @Query(filter: #Predicate<Person> { $0.isDormant })
     private var restingStars: [Person]
+
+    @Environment(\.modelContext) private var context
+    @State private var showImportWarning = false
+    @State private var showImporter = false
+    @State private var importResult: String?
 
     let store = Store.shared
 
@@ -138,7 +144,6 @@ struct SettingsSheet: View {
                 #endif
                 Section("Privacy") {
                     Toggle("Lock with Face ID", isOn: $faceIDLock)
-                    NavigationLink("Export my sky") { ExportView() }
                 }
                 Section("Kin") {
                     if store.isUnlocked {
@@ -153,15 +158,113 @@ struct SettingsSheet: View {
                         NavigationLink("Unlock Kin") { PaywallView() }
                         Button("Restore purchase") { Task { await store.restore() } }
                     }
+                    NavigationLink("Export my sky") { ExportView() }
+                    Button("Import a sky…") { showImportWarning = true }
                 }
                 Section("About") {
                     NavigationLink("How glow works") { HowGlowWorksView() }
                     Link("Support", destination: URL(string: "mailto:you@example.com")!)
                 }
+                Section("Legal") {
+                    Link("Privacy Policy",
+                         destination: URL(string: "https://kin.servatom.com/privacy")!)
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .alert("Replace your sky?", isPresented: $showImportWarning) {
+                Button("Import and replace", role: .destructive) { showImporter = true }
+                Button("Keep my sky", role: .cancel) {}
+            } message: {
+                Text("Importing overwrites everything here now — every star and every moment. This can't be undone. Export your current sky first if you want to keep it.")
+            }
+            .fileImporter(isPresented: $showImporter,
+                          allowedContentTypes: [.json]) { result in
+                switch result {
+                case .success(let url): importSky(from: url)
+                case .failure: importResult = "Couldn't open that file."
+                }
+            }
+            .alert("Import", isPresented: .init(
+                get: { importResult != nil },
+                set: { if !$0 { importResult = nil } }
+            )) {
+                Button("OK") { importResult = nil }
+            } message: {
+                Text(importResult ?? "")
+            }
         }
+    }
+
+    // MARK: Import
+
+    /// Mirrors ExportView's JSON shape exactly. Photos aren't part of the
+    /// export format, so imported moments arrive photoless.
+    private struct SkyFile: Codable {
+        struct FilePerson: Codable {
+            let name: String; let orbit: String; let state: String; let since: Date
+            let seed: Int; let x: Double; let y: Double
+        }
+        struct FileMoment: Codable {
+            let date: Date; let note: String; let feeling: String?
+            let people: [String]; let hasPhoto: Bool
+        }
+        let exportedAt: Date
+        let people: [FilePerson]
+        let moments: [FileMoment]
+    }
+
+    private func importSky(from url: URL) {
+        let secured = url.startAccessingSecurityScopedResource()
+        defer { if secured { url.stopAccessingSecurityScopedResource() } }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let data = try? Data(contentsOf: url),
+              let file = try? decoder.decode(SkyFile.self, from: data) else {
+            importResult = "That file doesn't look like a Kin sky export."
+            return
+        }
+
+        // Wipe the current sky — people, moments, and photo files.
+        // (Person→Moment delete rule is .nullify, so moments go explicitly.)
+        if let moments = try? context.fetch(FetchDescriptor<Moment>()) {
+            for moment in moments {
+                if let photoID = moment.photoID { PhotoStore.delete(id: photoID) }
+                context.delete(moment)
+            }
+        }
+        if let people = try? context.fetch(FetchDescriptor<Person>()) {
+            for person in people { context.delete(person) }
+        }
+
+        // Rebuild from the file. Names link moments to people, as exported.
+        var byName: [String: Person] = [:]
+        for entry in file.people {
+            let person = Person(name: entry.name,
+                                orbit: OrbitCadence(rawValue: entry.orbit) ?? .weekly)
+            person.state = StarState(rawValue: entry.state) ?? .active
+            person.createdAt = entry.since
+            person.colorSeed = entry.seed  // same color…
+            person.positionX = entry.x     // …same place in the sky
+            person.positionY = entry.y
+            context.insert(person)
+            byName[entry.name.lowercased()] = person
+        }
+        for entry in file.moments {
+            let involved = entry.people.compactMap { byName[$0.lowercased()] }
+            guard !involved.isEmpty else { continue }
+            let moment = Moment(timestamp: entry.date, note: entry.note,
+                                people: involved,
+                                feeling: entry.feeling.flatMap(Feeling.init(rawValue:)))
+            context.insert(moment)
+        }
+        try? context.save()
+
+        publishSky(context: context)  // widgets show the new sky at once
+        syncSiriVocabulary()          // Siri learns the new names
+        Haptics.shared.ignition(luminosity: 0.9)
+        importResult = "Sky imported — \(file.people.count) star\(file.people.count == 1 ? "" : "s"), \(file.moments.count) moment\(file.moments.count == 1 ? "" : "s"). Photos aren't carried by exports, so those start fresh."
     }
 }
 
@@ -199,6 +302,7 @@ struct ExportView: View {
         }
         struct ExportPerson: Codable {
             let name: String; let orbit: String; let state: String; let since: Date
+            let seed: Int; let x: Double; let y: Double // full sky fidelity
         }
         struct Export: Codable {
             let exportedAt: Date; let people: [ExportPerson]; let moments: [ExportMoment]
@@ -208,7 +312,8 @@ struct ExportView: View {
             exportedAt: .now,
             people: people.map {
                 ExportPerson(name: $0.name, orbit: $0.orbit.rawValue,
-                             state: $0.state.rawValue, since: $0.createdAt)
+                             state: $0.state.rawValue, since: $0.createdAt,
+                             seed: $0.colorSeed, x: $0.positionX, y: $0.positionY)
             },
             moments: moments.map {
                 ExportMoment(date: $0.timestamp, note: $0.note, feeling: $0.feelingRaw,
