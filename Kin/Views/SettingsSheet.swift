@@ -10,6 +10,9 @@ struct SettingsSheet: View {
     @AppStorage(KinShared.dustBrightnessKey,
                 store: UserDefaults(suiteName: KinShared.appGroupID))
     private var dustBrightness = 1.75
+    @AppStorage(SkyPalette.variantKey,
+                store: UserDefaults(suiteName: KinShared.appGroupID))
+    private var skyMoodRaw = SkyPhaseVariant.auto.rawValue
 
     /// LOW / MIDDLE / HIGH detents. The slider rests anywhere; these only
     /// speak through the haptics (and the brightening labels) when crossed.
@@ -61,6 +64,14 @@ struct SettingsSheet: View {
                     }
                 }
                 Section("Sky") {
+                    Picker("Sky mood", selection: $skyMoodRaw) {
+                        ForEach(SkyPhaseVariant.allCases, id: \.rawValue) { variant in
+                            Text(variant.displayName).tag(variant.rawValue)
+                        }
+                    }
+                    .onChange(of: skyMoodRaw) { _, _ in
+                        WidgetCenter.shared.reloadAllTimelines()
+                    }
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Star dust")
                         Slider(

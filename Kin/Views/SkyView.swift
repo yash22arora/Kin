@@ -18,6 +18,9 @@ struct SkyView: View {
     @AppStorage(KinShared.dustBrightnessKey,
                 store: UserDefaults(suiteName: KinShared.appGroupID))
     private var dustBrightness = 1.75
+    @AppStorage(SkyPalette.variantKey,
+                store: UserDefaults(suiteName: KinShared.appGroupID))
+    private var skyMoodRaw = SkyPhaseVariant.auto.rawValue
 
     /// Carries an add-star request (and its optional long-press birth point)
     /// through `.sheet(item:)`, so the sheet always reads the right position —
@@ -111,6 +114,10 @@ struct SkyView: View {
         // Dust slider in Settings → the sky answers live behind the sheet.
         .onChange(of: dustBrightness) { _, new in
             scene.dustBrightness = CGFloat(max(1.0, min(new, 2.5)))
+        }
+        // Sky mood picker in Settings → repaint behind the sheet, live.
+        .onChange(of: skyMoodRaw) { _, _ in
+            scene.refreshBackground()
         }
         .onOpenURL(perform: handleDeepLink)
         .onAppear {

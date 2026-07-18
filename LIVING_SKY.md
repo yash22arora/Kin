@@ -4,9 +4,14 @@ A phase-by-phase plan for making the background sky *agree with the real sky
 outside the user's window*. Not a decorative gradient cycle — the app's core
 conceit (these people are a sky you tend) made continuous with reality.
 
-**Status:** design spec, not yet built. Picks up when we take up the sky
-polish (see `POLISH.md` → "The sky itself"). Some layers depend on a paid
-Apple Developer account (WeatherKit) — noted per phase.
+**Status:** Phase A ✅ BUILT — `Core/SkyPalette.swift`: six OkLCh anchors
+interpolated along approximate solar altitude (clock+season model, assumed
+mid-latitude), morning legs violet-shifted, 3-stop gradient (zenith/mid/
+horizon) in both SkyScene and the widget, 60s live drift, plus a Settings
+"Sky mood" picker (Auto or pinned phase, App-Group-shared with widgets).
+Deliberately deferred from A: Milky Way band (waits for hue sign-off),
+adaptive legibility scrim, P3 rendering, real location.
+Phases B–E not built. WeatherKit (Phase C) needs the paid account.
 
 ---
 

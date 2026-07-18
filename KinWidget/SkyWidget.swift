@@ -183,12 +183,17 @@ enum WidgetSky {
     }
 
     static func background(at date: Date) -> LinearGradient {
-        // Single source of truth in Core — same gradient as the app's scene.
-        let colors = SkySnapshot.skyGradientColors(at: date)
+        // The Living Sky — same OkLCh palette and mood setting as the app.
+        let stops = SkyPalette.stops(at: date, variant: SkyPalette.currentVariant())
+        guard stops.count == 3 else {
+            return LinearGradient(colors: [Color(red: 0.03, green: 0.03, blue: 0.10)],
+                                  startPoint: .top, endPoint: .bottom)
+        }
         return LinearGradient(
-            colors: [
-                Color(red: colors.top.r, green: colors.top.g, blue: colors.top.b),
-                Color(red: colors.bottom.r, green: colors.bottom.g, blue: colors.bottom.b),
+            stops: [
+                .init(color: Color(red: stops[0].r, green: stops[0].g, blue: stops[0].b), location: 0),
+                .init(color: Color(red: stops[1].r, green: stops[1].g, blue: stops[1].b), location: 0.5),
+                .init(color: Color(red: stops[2].r, green: stops[2].g, blue: stops[2].b), location: 1),
             ],
             startPoint: .top, endPoint: .bottom
         )

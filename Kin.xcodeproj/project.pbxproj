@@ -70,6 +70,7 @@
 			membershipExceptions = (
 				Core/LuminosityEngine.swift,
 				Core/SkyLayout.swift,
+				Core/SkyPalette.swift,
 				Core/SkySnapshot.swift,
 				Core/SkySnapshotStore.swift,
 				Scenes/Assets.xcassets,

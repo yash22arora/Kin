@@ -84,6 +84,12 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
         rebuildDustField()
         rebuildAmbientStarfield()
 
+        // Live drift: the sky keeps pace with the real one while open.
+        run(.repeatForever(.sequence([
+            .wait(forDuration: 60),
+            .run { [weak self] in self?.layoutBackground() },
+        ])), withKey: "skyDrift")
+
         let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
         longPress.minimumPressDuration = 0.45
         longPress.delegate = self // never receives touches that start on a star
@@ -210,25 +216,33 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
 
     // MARK: Background & dust
 
+    /// The Living Sky (LIVING_SKY.md, Phase A): three OkLCh-authored stops —
+    /// zenith, mid, horizon warmth band — following the sun, or pinned to the
+    /// user's chosen mood from Settings.
     private func layoutBackground() {
-        let colors = SkySnapshot.skyGradientColors()
+        let stops = SkyPalette.stops(variant: SkyPalette.currentVariant())
+        guard stops.count == 3 else { return }
+        let colors = stops.map {
+            UIColor(red: $0.r, green: $0.g, blue: $0.b, alpha: 1).cgColor
+        } as CFArray
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 256))
         let image = renderer.image { ctx in
-            let cg = ctx.cgContext
             let gradient = CGGradient(
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                colors: [
-                    UIColor(red: colors.top.r, green: colors.top.g, blue: colors.top.b, alpha: 1).cgColor,
-                    UIColor(red: colors.bottom.r, green: colors.bottom.g, blue: colors.bottom.b, alpha: 1).cgColor,
-                ] as CFArray,
-                locations: [0, 1]
+                colors: colors,
+                locations: [0, 0.5, 1]
             )!
-            cg.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 256),
-                                  end: CGPoint(x: 0, y: 0), options: [])
+            ctx.cgContext.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 256),
+                                             end: CGPoint(x: 0, y: 0), options: [])
         }
         backgroundNode.texture = SKTexture(image: image)
         backgroundNode.size = size
         backgroundNode.position = .zero // centered on camera
+    }
+
+    /// Settings changed the sky mood — repaint immediately.
+    func refreshBackground() {
+        layoutBackground()
     }
 
     /// Settings-controlled dust multiplier (1.0 floor = original look).
