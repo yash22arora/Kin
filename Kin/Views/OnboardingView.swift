@@ -69,6 +69,10 @@ struct OnboardingView: View {
         .animation(.easeInOut(duration: 0.8), value: step)
         .onAppear(perform: configureSky)
         .onChange(of: step) { old, new in
+            // Haptic crescendo: each step lands a touch warmer than the last,
+            // peaking at the moment the sky is revealed.
+            Haptics.shared.ignition(
+                luminosity: new == .sky ? 1.0 : min(0.85, 0.3 + Double(new.rawValue) * 0.09))
             analytics.track(.onboardingStep(step: new.rawValue, completed: true))
             // Entering orbits: the backdrop sky dives away so the star on
             // stage holds the room alone. (The return trip happens in
@@ -123,8 +127,10 @@ struct OnboardingView: View {
                 .animation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true),
                            value: heroBreathing)
                 .onAppear { heroBreathing = true }
+                .poeticReveal()
             Text("Everyone you love is a light.")
                 .font(KinType.heroLine).foregroundStyle(.white.opacity(0.9))
+                .poeticReveal(delay: 0.4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
@@ -228,13 +234,16 @@ struct OnboardingView: View {
                 Text("This is your sky on \(Date.now.formatted(.dateTime.month(.wide).day())).")
                     .font(KinType.title).foregroundStyle(.white)
                     .multilineTextAlignment(.center)
+                    .poeticReveal(delay: 0.15)
                 Text(isReplay && !existingPeople.isEmpty
                      ? "\(existingPeople.count) star\(existingPeople.count == 1 ? "" : "s"), still glowing."
                      : "Tend it, and it glows.")
                     .font(.footnote).foregroundStyle(.white.opacity(0.6))
+                    .poeticReveal(delay: 0.6)
                 Button("Continue") { step = .demo }
                     .buttonStyle(.borderedProminent).tint(.white.opacity(0.2))
                     .padding(.top, 4)
+                    .poeticReveal(delay: 1.1)
             }
             .padding()
             .padding(.bottom, 48)
@@ -422,6 +431,7 @@ struct OnboardingView: View {
         VStack(spacing: 24) {
             Text("The deal, plainly.")
                 .font(KinType.title).foregroundStyle(.white)
+                .poeticReveal(delay: 0.1)
             Text("Kin is yours, fully, free for 7 days.\nThen \(Store.shared.lifetimeProduct?.displayPrice ?? "$4.99"), once, forever — or keep a free sky of 3 stars.\n\nNo subscription. No account.\nYour sky never leaves your device.")
                 .font(.callout).foregroundStyle(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
@@ -685,6 +695,33 @@ private struct OrbitCarousel: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Poetic reveal
+
+/// Lines are spoken, not shown: rise, un-blur, fade in — staggered by delay
+/// so a screen reads like a breath, not a layout. Reduce Motion keeps the
+/// fade, drops the motion.
+struct PoeticReveal: ViewModifier {
+    let delay: Double
+    @State private var revealed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(revealed ? 1 : 0)
+            .offset(y: revealed || reduceMotion ? 0 : 10)
+            .blur(radius: revealed || reduceMotion ? 0 : 4)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.9).delay(delay)) { revealed = true }
+            }
+    }
+}
+
+extension View {
+    func poeticReveal(delay: Double = 0) -> some View {
+        modifier(PoeticReveal(delay: delay))
     }
 }
 

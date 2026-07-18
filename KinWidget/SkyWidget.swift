@@ -148,6 +148,28 @@ enum WidgetSky {
                        y: (y - 0.5) * side + size.height / 2)
     }
 
+    /// The faint grain of distant stars, matching the app's dust field and
+    /// its Settings brightness slider (shared via the App Group). Seeded
+    /// LCG so the grain never rearranges between timeline refreshes.
+    static func drawDust(in context: inout GraphicsContext, size: CGSize) {
+        let brightness = KinShared.dustBrightness
+        var state: UInt64 = 0x9E37_79B9_7F4A_7C15
+        func rand() -> Double {
+            state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            return Double((state >> 33) & 0xFF_FFFF) / Double(0xFF_FFFF)
+        }
+        for _ in 0..<48 {
+            let x = rand() * size.width
+            let y = rand() * size.height
+            let r = 0.4 + rand() * 0.6
+            let alpha = min(0.5, (0.05 + rand() * 0.10) * brightness)
+            context.fill(
+                Circle().path(in: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+                with: .color(.white.opacity(alpha))
+            )
+        }
+    }
+
     static func drawLines(_ snapshot: SkySnapshot, in context: inout GraphicsContext, size: CGSize) {
         let starsByID = Dictionary(uniqueKeysWithValues: snapshot.stars.map { ($0.id, $0) })
         for line in snapshot.lines {
@@ -181,6 +203,7 @@ struct SkyWidgetView: View {
     var body: some View {
         ZStack {
             Canvas { context, size in
+                WidgetSky.drawDust(in: &context, size: size)
                 WidgetSky.drawLines(entry.snapshot, in: &context, size: size)
                 for star in entry.snapshot.stars {
                     WidgetSky.draw(star, in: &context, size: size)

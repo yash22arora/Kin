@@ -15,6 +15,9 @@ struct SkyView: View {
     @State private var showSettings = false
     @State private var starBirth: StarBirth?
     @State private var detailPersonID: UUID?
+    @AppStorage(KinShared.dustBrightnessKey,
+                store: UserDefaults(suiteName: KinShared.appGroupID))
+    private var dustBrightness = 1.75
 
     /// Carries an add-star request (and its optional long-press birth point)
     /// through `.sheet(item:)`, so the sheet always reads the right position —
@@ -105,6 +108,10 @@ struct SkyView: View {
         .onChange(of: detailPersonID) { _, new in
             if new == nil { scene.unfocus() }
         }
+        // Dust slider in Settings → the sky answers live behind the sheet.
+        .onChange(of: dustBrightness) { _, new in
+            scene.dustBrightness = CGFloat(max(1.0, min(new, 2.5)))
+        }
         .onOpenURL(perform: handleDeepLink)
         .onAppear {
             analytics.track(.skyOpened(
@@ -181,8 +188,25 @@ struct SkyView: View {
 
     // MARK: Pieces
 
+    /// Tonight's real moon, one of eight faces. Anchored to a known new moon
+    /// (Jan 6 2000, 18:14 UTC) over the 29.53-day synodic month.
+    private var moonPhaseSymbol: String {
+        let reference = Date(timeIntervalSince1970: 947_182_440)
+        let days = Date().timeIntervalSince(reference) / 86_400
+        let phase = (days.truncatingRemainder(dividingBy: 29.53059)) / 29.53059
+        let symbols = ["moonphase.new.moon", "moonphase.waxing.crescent",
+                       "moonphase.first.quarter", "moonphase.waxing.gibbous",
+                       "moonphase.full.moon", "moonphase.waning.gibbous",
+                       "moonphase.last.quarter", "moonphase.waning.crescent"]
+        return symbols[Int((phase * 8).rounded()) % 8]
+    }
+
     private var header: some View {
         HStack {
+            Image(systemName: moonPhaseSymbol)
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.45))
+                .accessibilityLabel("Tonight's moon")
             Text(Date.now.formatted(.dateTime.weekday(.wide).month().day()))
                 .font(.footnote.smallCaps())
                 .foregroundStyle(.white.opacity(0.5))
@@ -196,7 +220,7 @@ struct SkyView: View {
                 }
                 .accessibilityLabel("New star")
                 Button { showSettings = true } label: {
-                    Image(systemName: "moon.stars")
+                    Image(systemName: "gearshape") // real moon now lives by the date
                         .foregroundStyle(.white.opacity(0.5))
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())

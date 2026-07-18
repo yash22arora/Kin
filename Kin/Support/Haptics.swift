@@ -14,6 +14,26 @@ final class Haptics {
         try? engine?.start()
     }
 
+    /// Remembered stars answer differently: no bright transient, just one
+    /// deep, steady swell — presence under the finger, not sparkle.
+    func remembered() {
+        guard let engine else {
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred(intensity: 0.7)
+            return
+        }
+        let swell = CHHapticEvent(
+            eventType: .hapticContinuous,
+            parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.55),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.08),
+            ],
+            relativeTime: 0, duration: 0.5)
+        if let pattern = try? CHHapticPattern(events: [swell], parameters: []),
+           let player = try? engine.makePlayer(with: pattern) {
+            try? player.start(atTime: 0)
+        }
+    }
+
     /// The star-touch haptic. Intensity and warmth (sharpness inverse) scale
     /// with luminosity: bright star = fuller, softer thump; dim = faint tick.
     func ignition(luminosity: Double) {

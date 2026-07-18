@@ -6,6 +6,17 @@ import Foundation
 public enum KinShared {
     public static let appGroupID = "group.com.servatom.kin"
     public static let snapshotFilename = "sky-snapshot.json"
+    public static let dustBrightnessKey = "dustBrightness"
+
+    /// Dust brightness multiplier, shared app ↔ widget via the App Group.
+    /// Range 1.0 (floor, the original look) … 2.5 (brightest). Default sits
+    /// at the middle detent, 1.75.
+    public static var dustBrightness: Double {
+        let value = UserDefaults(suiteName: appGroupID)?
+            .double(forKey: dustBrightnessKey) ?? 1.75
+        guard value >= 1.0 else { return 1.75 } // unset (0) → middle default
+        return min(value, 2.5)
+    }
 }
 
 /// Writes/reads the SkySnapshot to the App Group container.

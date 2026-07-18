@@ -143,7 +143,11 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
             other.run(.fadeAlpha(to: 0.15, duration: duration))
         }
         lineLayer.run(.fadeAlpha(to: 0.25, duration: duration))
-        Haptics.shared.ignition(luminosity: 0.9)
+        if currentSnapshot?.stars.first(where: { $0.id == id })?.isRemembered == true {
+            Haptics.shared.remembered() // steady presence, not sparkle
+        } else {
+            Haptics.shared.ignition(luminosity: 0.9)
+        }
     }
 
     /// Reverse the zoom and wake the sky back up.
@@ -223,6 +227,19 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
         backgroundNode.position = .zero // centered on camera
     }
 
+    /// Settings-controlled dust multiplier (1.0 floor = original look).
+    /// Live-updates existing particles — no re-scatter while sliding.
+    var dustBrightness: CGFloat = CGFloat(KinShared.dustBrightness) {
+        didSet {
+            guard dustBrightness != oldValue else { return }
+            for dust in dustLayer.children {
+                if let base = dust.userData?["baseAlpha"] as? CGFloat {
+                    dust.alpha = min(0.5, base * dustBrightness)
+                }
+            }
+        }
+    }
+
     private func rebuildDustField() {
         dustLayer.removeAllChildren()
         // Spawn beyond the edges so the focus zoom never finds empty sky.
@@ -230,7 +247,9 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
             let dust = SKShapeNode(circleOfRadius: CGFloat.random(in: 0.4...1.0))
             dust.fillColor = .white
             dust.lineWidth = 0
-            dust.alpha = CGFloat.random(in: 0.05...0.15)
+            let base = CGFloat.random(in: 0.05...0.15)
+            dust.alpha = min(0.5, base * dustBrightness)
+            dust.userData = ["baseAlpha": base]
             dust.position = CGPoint(
                 x: .random(in: -size.width * 0.2...size.width * 1.2),
                 y: .random(in: -size.height * 0.2...size.height * 1.2)
@@ -484,18 +503,32 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
         let up = SKAction.fadeAlpha(to: base, duration: .random(in: 0.9...1.6))
         up.timingMode = .easeInEaseOut
         let scintillate = SKAction.repeatForever(.sequence([down, up]))
-        node.run(ignite ? .sequence([.fadeAlpha(to: base, duration: 1.2), scintillate])
-                        : scintillate,
-                 withKey: "alpha")
 
         // Slow breath: ±2% scale over ~7s. The sky is alive, barely.
-        node.setScale(baseScale)
         let breath = Double.random(in: 6.0...9.0)
         let grow = SKAction.scale(to: baseScale * 1.02, duration: breath)
         grow.timingMode = .easeInEaseOut
         let shrink = SKAction.scale(to: baseScale * 0.985, duration: breath)
         shrink.timingMode = .easeInEaseOut
-        node.run(.repeatForever(.sequence([grow, shrink])), withKey: "shimmer")
+        let breathe = SKAction.repeatForever(.sequence([grow, shrink]))
+
+        if ignite {
+            // Born, not faded in: a spark that blooms past its size, then
+            // settles into its place and starts breathing.
+            node.alpha = 0
+            node.setScale(baseScale * 0.2)
+            node.run(.sequence([.fadeAlpha(to: base, duration: 0.3), scintillate]),
+                     withKey: "alpha")
+            let spark = SKAction.scale(to: baseScale * 1.3, duration: 0.3)
+            spark.timingMode = .easeOut
+            let settle = SKAction.scale(to: baseScale, duration: 0.6)
+            settle.timingMode = .easeInEaseOut
+            node.run(.sequence([spark, settle, breathe]), withKey: "shimmer")
+        } else {
+            node.run(scintillate, withKey: "alpha")
+            node.setScale(baseScale)
+            node.run(breathe, withKey: "shimmer")
+        }
     }
 
     // MARK: Constellation lines

@@ -1,10 +1,30 @@
 import SwiftUI
 import SwiftData
+import WidgetKit
 
 struct SettingsSheet: View {
     @AppStorage("stargazingHour") private var stargazingHour = 21
     @AppStorage("stargazingEnabled") private var stargazingEnabled = false
     @AppStorage("faceIDLock") private var faceIDLock = false
+    // App Group store, so widgets read the same value.
+    @AppStorage(KinShared.dustBrightnessKey,
+                store: UserDefaults(suiteName: KinShared.appGroupID))
+    private var dustBrightness = 1.75
+
+    /// LOW / MIDDLE / HIGH detents. The slider rests anywhere; these only
+    /// speak through the haptics (and the brightening labels) when crossed.
+    private let dustDetents: [Double] = [1.0, 1.75, 2.5]
+    @State private var activeDustDetent: Double?
+
+    /// Tiny tracked caption under the slider; lights up while the thumb
+    /// sits in its detent's zone.
+    private func detentLabel(_ text: String, detent: Double) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .medium)).tracking(1.2)
+            .foregroundStyle(.white.opacity(
+                abs(dustBrightness - detent) < 0.06 ? 0.85 : 0.3))
+            .animation(.easeOut(duration: 0.2), value: dustBrightness)
+    }
 
     @Query(filter: #Predicate<Person> { $0.isDormant })
     private var restingStars: [Person]
@@ -38,6 +58,40 @@ struct SettingsSheet: View {
                         .onChange(of: stargazingHour) { _, hour in
                             NotificationScheduler.schedule(hour: hour)
                         }
+                    }
+                }
+                Section("Sky") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Star dust")
+                        Slider(
+                            value: $dustBrightness,
+                            in: 1.0...2.5,
+                            onEditingChanged: { editing in
+                                // Widgets re-render once, when the finger lifts.
+                                if !editing { WidgetCenter.shared.reloadAllTimelines() }
+                            }
+                        )
+                        .onChange(of: dustBrightness) { _, new in
+                            // A tick when the thumb passes a detent — the tick
+                            // itself brightens with the detent, like the dust.
+                            let zone = dustDetents.first { abs($0 - new) < 0.06 }
+                            if let zone, zone != activeDustDetent {
+                                Haptics.shared.ignition(
+                                    luminosity: 0.25 + (zone - 1.0) / 1.5 * 0.5)
+                            }
+                            activeDustDetent = zone
+                        }
+                        HStack {
+                            detentLabel("LOW", detent: dustDetents[0])
+                            Spacer()
+                            detentLabel("MEDIUM", detent: dustDetents[1])
+                            Spacer()
+                            detentLabel("HIGH", detent: dustDetents[2])
+                        }
+                        Text("The faint grain of distant stars, in the app and your widgets.")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.45))
+                            .padding(.top, 2)
                     }
                 }
                 Section("Privacy") {

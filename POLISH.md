@@ -1,67 +1,46 @@
-# Kin — Visual Polish Backlog (post-functionality)
+# Kin — Polish Backlog
 
-## Next up: onboarding upgrades
-- ✅ Live starfield (dust + faint stars) behind ALL onboarding steps
-- ✅ Names igniting into their real seeded sky positions as they're typed
-- ✅ Orbit step: left-anchored star, full-width rings, plate carousel between
-  stars, backdrop camera dive/return, sequenced (no-overlap) sky reveal
-- Haptic crescendo: warmer haptic per step, peaking at the sky reveal
-- Line-by-line text reveal for poetic headlines
+## ✅ Done (kept for the record)
+- Onboarding: living starfield backdrop, names igniting at real seeded
+  positions, orbit carousel (left-anchored star, plate rotation, camera
+  dive/return), glow demo w/ streak comet + third star, widget card rotation
+  with real first-star name, gated Continue buttons, haptic crescendo,
+  poetic text reveal, Fraunces voice
+- Sky: point-spread stars w/ earned tapered crosses, time-of-day gradient
+  (app+widget shared), parallax, constellation lines, drag-to-arrange,
+  ghost star, spark→bloom ignition, remembered stars (steady render + deep
+  steady haptic), real moon phase in header, focus zoom w/ sheet
+- Ambient: random comet streaks + meteor showers (flags), 20–25s cadence
+- System: widgets (My Sky S/M/L + configurable One Star), Siri log-moment,
+  launch storyboard (full-bleed), app icon (uniform hairline cross, by choice)
+- Monetization: trial-end keep-3 flow, dormant/restore, StoreKit test setup,
+  offline paywall messaging, cached entitlements
+
+## Next (pre- or post-launch, no account needed)
+- Comet trail `.sks` final tuning on device (owner: Yash)
+- Line-by-line *word* reveal (current reveal is per-line; word-stagger needs
+  a custom layout — revisit if a screen still feels flat)
+- Star "leaning" toward an incoming comet (micro-delight, low priority)
+- Sound design: ambient shimmer + arrival chime — commission before v1.1
+- Device audit: VoiceOver walkthrough, Dynamic Type max, 60fps @ 40 stars
 
 ## ⏸ Parked: pick up just before CloudKit integration
-- **Siri phrase refinement** — "Log a moment" works; StarBrightness and OpenStar
-  phrases don't resolve reliably. Try: more phrase variants per shortcut,
-  simpler trigger words ("check on", "visit"), test vocabulary sync timing,
-  and verify parameterSummary rendering in Shortcuts app.
+- **Siri phrase refinement** — "Log a moment" works; StarBrightness and
+  OpenStar phrases don't resolve reliably. Try more phrase variants, simpler
+  trigger words ("check on", "visit"), vocabulary sync timing.
 
 ## ⏸ Parked: needs paid Apple Developer account
-- **iCloud sync** — re-enable steps documented in `KinApp.init` (entitlements,
-  background mode, flip `.none` → `.automatic`). Models stay CloudKit-compatible.
-  Until then, the honest privacy copy is "stays on your device", not "your devices".
-- **App Store Connect** — lifetime IAP product, TestFlight, privacy labels.
+- **iCloud sync** — recipe in `KinModelContainer.swift`; models stay
+  CloudKit-compatible. Then flip copy back to "your devices".
+- **App Store Connect** — IAP product, TestFlight, privacy labels, featuring
+  form with ADA-rubric language. Remember: TestFlight trial anchor makes your
+  own trial appear expired (expected; use mock purchase).
 
-Ideas noted during development, roughly ordered by impact-per-effort.
-
-## Signature moments
-- **Ghost star on long-press**: faint pulsing star at the press point behind the
-  new-star sheet — the birth feels anticipated. (Agreed during dev.)
-- **Comet trail tuning**: CometTrail.sks — scale ~0.05–0.1, birthrate ~200,
-  lifetime ~0.5s, negative alpha speed so the streak dissolves behind the comet.
-- **Ignition choreography**: new star born via long-press should ignite from a
-  spark → bloom, not just fade in.
-
-## The sky itself
-- Background gradient driven by `SkySnapshot.skyPhase` (time of day) + season;
-  replace flat indigo. Same gradient in app and widget.
-  → **Full plan: `LIVING_SKY.md`** — phase-by-phase solar hue arc, moon/weather/
-  season layers, OkLCh spec, and build order. Read that when we take this up.
-- Subtle parallax on device tilt (CMMotionManager), disabled with Reduce Motion.
-- Milky Way density band in summer months.
-- Real moon phase in the header (currently decorative icon).
-- Dust field: vary density/size with season; consider one slow ambient drift.
-- Constellation lines between co-mentioned stars (data model ready): thin,
-  brightening with repetition; draw in both SkyScene and widget Canvas.
-- Remembered stars: distinct fixed rendering (softer, steadier — no twinkle).
-
-## Interactions & motion
-- Pinch to zoom sky ↔ star view (plan's spatial navigation).
-- Drag to rearrange stars, position persists (model fields already exist).
-- Pause shimmer during shooting-star pulse (done); consider star "leaning"
-  toward an incoming comet.
-- Sheet transitions: log sheet should feel like kneeling at the sky's edge —
-  keep stars visible above the sheet, glow anticipating while typing.
-
-## Widgets & system surfaces
-- Lock screen accessory widget + StandBy mode (bedside sky).
-- One Star widget: AppIntentConfiguration person picker.
-- iOS 18 tinted/dark app icon variants + real icon artwork (glowing star on indigo).
-
-## Sound & haptics
-- Off-by-default ambient shimmer layer that thickens with sky brightness;
-  soft chime on shooting-star arrival (commission a sound designer).
-- Distinct haptic curve for "remembered" stars (steadier, deeper).
-
-## Big set pieces (v2)
-- "Your Year of Light" — Dec 31 animated flythrough, shareable video.
-- Meteor showers on real meteor-shower nights (WeatherKit / astronomy table).
-- "The real sky is clear tonight too" moments via WeatherKit.
+## v1.x / v2 set pieces
+- Lock screen accessory + StandBy bedside sky
+- Season layer: Milky Way band in summer, seasonal dust — see `LIVING_SKY.md`
+- Pinch to zoom sky ↔ constellation view
+- Meteor showers on real shower nights; "the real sky is clear tonight too"
+  (WeatherKit)
+- **"Your Year of Light"** — Dec 31 flythrough, shareable video (launch
+  marketing gold)
