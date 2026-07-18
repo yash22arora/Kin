@@ -13,6 +13,10 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
     private var starNodes: [UUID: StarNode] = [:]
     private var currentSnapshot: SkySnapshot?
     private var pendingSnapshot: SkySnapshot?
+    /// False until the first apply() has run. Stars added on that first pass
+    /// are the *saved* sky returning — they appear quietly. Only stars that
+    /// join after it are genuinely born, and earn the ignition.
+    private var hasPopulated = false
     private var reduceMotion: Bool { UIAccessibility.isReduceMotionEnabled }
 
     var onStarTap: ((UUID) -> Void)?
@@ -439,8 +443,15 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
             let isNew = starNodes[star.id] == nil
             let node = starNodes[star.id] ?? makeStarNode(for: star)
             if draggedStarID != star.id { position(node, star: star) }
-            if focusedStarID == nil { style(node, star: star, ignite: isNew) }
+            if focusedStarID == nil {
+                // Ignition is for births only — the first apply() is the
+                // saved sky returning (`arrival`), without fanfare.
+                style(node, star: star,
+                      ignite: isNew && hasPopulated,
+                      arrival: isNew && !hasPopulated)
+            }
         }
+        hasPopulated = true
         rebuildLines(snapshot)
         // NOTE: the ghost star is deliberately NOT removed here — apply()
         // runs on every snapshot refresh, which would sweep the ghost away
@@ -462,15 +473,26 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
         node.position = CGPoint(x: star.x * size.width, y: (1 - star.y) * size.height)
     }
 
-    private func style(_ node: StarNode, star: SkySnapshot.Star, ignite: Bool) {
+    private func style(_ node: StarNode, star: SkySnapshot.Star, ignite: Bool,
+                       arrival: Bool = false) {
         let lum = star.luminosity
         // Narrower size spread than before — real skies vary brightness far
         // more than diameter. Brightness carries the meaning; size whispers it.
         let baseScale = 0.7 + lum * 0.7
         let base = CGFloat(0.5 + 0.5 * lum)
-        node.removeAction(forKey: "alpha")
-        node.removeAction(forKey: "shimmer")
         node.removeAction(forKey: "focusScale")
+
+        // style() runs on EVERY snapshot refresh, which is frequent. It must
+        // be idempotent: entrances (arrival/ignite) always take the stage,
+        // but steady-state passes may only rebuild the alpha/shimmer loops
+        // when the star's brightness actually changed — never interrupting
+        // an entrance in flight, never resetting a loop for no reason.
+        if node.userData == nil { node.userData = NSMutableDictionary() }
+        let storedBase = node.userData?["alphaBase"] as? CGFloat
+        let baseChanged = storedBase == nil || abs((storedBase ?? 0) - base) > 0.01
+        node.userData?["alphaBase"] = base
+        let alphaIdle = node.action(forKey: "alpha") == nil
+        let shimmerIdle = node.action(forKey: "shimmer") == nil
 
         node.halo.alpha = 0.10 + 0.28 * lum
         // Diffraction cross: only the brightest stars earn one, and faintly —
@@ -478,14 +500,30 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
         node.cross.alpha = lum > 0.55 ? CGFloat((lum - 0.55) / 0.45) * 0.22 : 0
 
         guard !reduceMotion else {
+            node.removeAction(forKey: "alpha")
+            node.removeAction(forKey: "shimmer")
             node.alpha = base
             node.setScale(baseScale)
             return
         }
 
         if star.isRemembered {
-            node.alpha = base
+            if arrival {
+                // The remembered arrive last, after the living sky has
+                // settled — a beat of stillness, then a slow, sure fade.
+                node.removeAction(forKey: "alpha")
+                node.alpha = 0
+                node.run(.sequence([
+                    .wait(forDuration: 0.7),
+                    .fadeAlpha(to: base, duration: 1.0),
+                ]), withKey: "alpha")
+            } else if alphaIdle || baseChanged {
+                node.removeAction(forKey: "alpha")
+                node.alpha = base
+            }
+            // else: an arrival fade is mid-flight — it ends at base; let it.
             node.setScale(baseScale)
+            node.removeAction(forKey: "shimmer")
             // Steady light, breathing once per ~16s — presence, not performance.
             let inhale = SKAction.scale(to: baseScale * 1.015, duration: 8.0)
             inhale.timingMode = .easeInEaseOut
@@ -515,6 +553,8 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
         if ignite {
             // Born, not faded in: a spark that blooms past its size, then
             // settles into its place and starts breathing.
+            node.removeAction(forKey: "alpha")
+            node.removeAction(forKey: "shimmer")
             node.alpha = 0
             node.setScale(baseScale * 0.2)
             node.run(.sequence([.fadeAlpha(to: base, duration: 0.3), scintillate]),
@@ -524,10 +564,66 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
             let settle = SKAction.scale(to: baseScale, duration: 0.6)
             settle.timingMode = .easeInEaseOut
             node.run(.sequence([spark, settle, breathe]), withKey: "shimmer")
-        } else {
-            node.run(scintillate, withKey: "alpha")
+
+            // Birth sparkle: the tapered hairline cross flashes once —
+            // appears, reaches past the bloom, and collapses to nothing —
+            // then hands the cross back to its luminosity-earned steady state.
+            // Choreography: two phases, summing to exactly `flashTotal`.
+            // Phase A (40%): grow 0.3→2.0×, easing out; alpha arrives fast
+            //   (half the phase) so the line is bright while still reaching.
+            // Phase B (60%): collapse to zero, easing in; alpha dies with it.
+            // A group's length = its longest member, so each phase's scale
+            // action defines the phase; alpha just rides inside it.
+            let flashTotal = 1.4
+            let growDuration = flashTotal * 0.4
+            let closeDuration = flashTotal * 0.6
+
+            let steadyCross = node.cross.alpha // set above by the lum gate
+            node.cross.removeAllActions()
+            node.cross.alpha = 0
+            node.cross.setScale(0.3)
+
+            let reach = SKAction.scale(to: 1.0, duration: growDuration)
+            reach.timingMode = .easeOut
+            let flashIn = SKAction.group([
+                .fadeAlpha(to: 0.85, duration: growDuration * 0.5),
+                reach,
+            ])
+
+            let close = SKAction.scale(to: 0.001, duration: closeDuration)
+            close.timingMode = .easeIn
+            let collapse = SKAction.group([
+                .fadeAlpha(to: 0, duration: closeDuration),
+                close,
+            ])
+
+            let handBack = SKAction.run { [weak node] in
+                node?.cross.setScale(1.0)
+                node?.cross.alpha = steadyCross
+            }
+            node.cross.run(.sequence([flashIn, collapse, handBack]))
+        } else if arrival {
+            // The saved sky returning: a brisk, quiet fade-up (much faster
+            // than the scintillation's lazy first ramp), then normal life.
+            node.removeAction(forKey: "alpha")
+            node.removeAction(forKey: "shimmer")
+            node.alpha = 0
+            let fadeUp = SKAction.fadeAlpha(to: base, duration: 0.4)
+            fadeUp.timingMode = .easeOut
+            node.run(.sequence([fadeUp, scintillate]), withKey: "alpha")
             node.setScale(baseScale)
             node.run(breathe, withKey: "shimmer")
+        } else {
+            // Steady state: touch nothing that's already living correctly.
+            if alphaIdle || baseChanged {
+                node.removeAction(forKey: "alpha")
+                node.run(scintillate, withKey: "alpha")
+            }
+            if shimmerIdle || baseChanged {
+                node.removeAction(forKey: "shimmer")
+                node.setScale(baseScale)
+                node.run(breathe, withKey: "shimmer")
+            }
         }
     }
 
