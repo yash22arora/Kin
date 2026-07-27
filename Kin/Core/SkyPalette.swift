@@ -35,10 +35,10 @@ public enum SkyPhaseVariant: String, CaseIterable, Sendable {
         case .auto:       return nil
         case .day:        return (12, false)
         case .goldenHour: return (3, false)
-        case .dusk:       return (-3, false)
-        case .blueHour:   return (-9, false)
+        case .dusk:       return (-7, false)
+        case .blueHour:   return (-12, false)
         case .deepNight:  return (-25, false)
-        case .dawn:       return (-3, true)
+        case .dawn:       return (-7, true)
         }
     }
 }

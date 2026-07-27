@@ -245,9 +245,13 @@ struct SettingsSheet: View {
                                 orbit: OrbitCadence(rawValue: entry.orbit) ?? .weekly)
             person.state = StarState(rawValue: entry.state) ?? .active
             person.createdAt = entry.since
-            person.colorSeed = entry.seed  // same color…
-            person.positionX = entry.x     // …same place in the sky
-            person.positionY = entry.y
+            person.colorSeed = entry.seed // same color…
+            // …same place — but hand-edited files don't get to put stars
+            // off-screen. Out-of-range coords fall back to reseeding.
+            if (0.0...1.0).contains(entry.x) && (0.0...1.0).contains(entry.y) {
+                person.positionX = entry.x
+                person.positionY = entry.y
+            }
             context.insert(person)
             byName[entry.name.lowercased()] = person
         }
@@ -261,8 +265,16 @@ struct SettingsSheet: View {
         }
         try? context.save()
 
-        publishSky(context: context)  // widgets show the new sky at once
-        syncSiriVocabulary()          // Siri learns the new names
+        // Entitlement guard: if this import trips the trial gate (locked +
+        // more lit stars than the free sky allows), widgets and Siri must NOT
+        // learn the oversized sky — the keep-3 choice republishes both after
+        // the user resolves the gate. Without this, import-then-force-quit
+        // would leave a >3-star sky on the home screen forever, unpaid.
+        let lit = byName.values.filter { $0.state != .released && !$0.isDormant }.count
+        if store.hasFullAccess || lit <= Store.freeStarLimit {
+            publishSky(context: context)
+            syncSiriVocabulary()
+        }
         Haptics.shared.ignition(luminosity: 0.9)
         importResult = "Sky imported — \(file.people.count) star\(file.people.count == 1 ? "" : "s"), \(file.moments.count) moment\(file.moments.count == 1 ? "" : "s"). Photos aren't carried by exports, so those start fresh."
     }
