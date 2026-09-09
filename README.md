@@ -1,5 +1,7 @@
 # Kin
 
+![Kin Logo](./kin-logo.png)
+
 *Your people as a private night sky. Tend it, and it glows.*
 
 Every person you love is a star. Log a shared moment — a call, a coffee, a
