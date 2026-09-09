@@ -1,6 +1,8 @@
-# Kin
+<p align="center">
+  <img src="./kin-logo.png" width="120" height="120" alt="Kin app icon" />
+</p>
 
-![Kin Logo](./kin-logo.png)
+# Kin
 
 *Your people as a private night sky. Tend it, and it glows.*
 
