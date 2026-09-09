@@ -120,14 +120,36 @@ struct StarDetailView: View {
         }
     }
 
-    /// "A year ago tonight" — resurfacing, the quiet gift.
+    /// Anniversary resurfacing — the quiet gift, for any past year.
+    private var anniversaryMatch: (moment: Moment, yearsAgo: Int)? {
+        let calendar = Calendar.current
+        let today = calendar.dateComponents([.month, .day, .year], from: .now)
+        for moment in sortedMoments {
+            let m = calendar.dateComponents([.month, .day, .year], from: moment.timestamp)
+            if m.month == today.month, m.day == today.day,
+               let y = m.year, let ty = today.year, y < ty {
+                return (moment, ty - y)
+            }
+        }
+        return nil
+    }
+
+    private func anniversaryTitle(yearsAgo: Int) -> String {
+        switch yearsAgo {
+        case 1: return "A year ago tonight"
+        case 2: return "Two years ago tonight"
+        case 3: return "Three years ago tonight"
+        default: return "\(yearsAgo) years ago tonight"
+        }
+    }
+
     @ViewBuilder
     private var yearAgoCard: some View {
-        let calendar = Calendar.current
-        if let yearAgo = calendar.date(byAdding: .year, value: -1, to: .now),
-           let match = sortedMoments.first(where: { calendar.isDate($0.timestamp, inSameDayAs: yearAgo) }) {
+        if let found = anniversaryMatch {
+            let match = found.moment
             VStack(alignment: .leading, spacing: 6) {
-                Text("A year ago tonight").font(.caption.smallCaps()).foregroundStyle(.white.opacity(0.5))
+                Text(anniversaryTitle(yearsAgo: found.yearsAgo))
+                    .font(.caption.smallCaps()).foregroundStyle(.white.opacity(0.5))
                 if !match.note.isEmpty {
                     Text(match.note).font(.callout).foregroundStyle(.white.opacity(0.9))
                 }

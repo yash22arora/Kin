@@ -12,12 +12,30 @@ public struct SkySnapshot: Equatable, Sendable, Codable {
         public let luminosity: Double // floorGlow...1
         public let temperature: Double // 0 warm ... 1 cool
         public let isRemembered: Bool
+        /// A moment from this exact date, some past year — the star
+        /// breathes a little brighter today. (Decodes to false when absent,
+        /// so older stored snapshots stay readable.)
+        public let hasAnniversary: Bool
 
         public init(id: UUID, name: String, x: Double, y: Double,
-                    luminosity: Double, temperature: Double, isRemembered: Bool) {
+                    luminosity: Double, temperature: Double, isRemembered: Bool,
+                    hasAnniversary: Bool = false) {
             self.id = id; self.name = name; self.x = x; self.y = y
             self.luminosity = luminosity; self.temperature = temperature
             self.isRemembered = isRemembered
+            self.hasAnniversary = hasAnniversary
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(UUID.self, forKey: .id)
+            name = try c.decode(String.self, forKey: .name)
+            x = try c.decode(Double.self, forKey: .x)
+            y = try c.decode(Double.self, forKey: .y)
+            luminosity = try c.decode(Double.self, forKey: .luminosity)
+            temperature = try c.decode(Double.self, forKey: .temperature)
+            isRemembered = try c.decode(Bool.self, forKey: .isRemembered)
+            hasAnniversary = try c.decodeIfPresent(Bool.self, forKey: .hasAnniversary) ?? false
         }
     }
 

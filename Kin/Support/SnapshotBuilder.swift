@@ -29,10 +29,25 @@ enum SnapshotBuilder {
                 x: pos.x, y: pos.y,
                 luminosity: person.luminosity(),
                 temperature: SkyLayout.temperature(colorSeed: person.colorSeed),
-                isRemembered: person.state == .remembered
+                isRemembered: person.state == .remembered,
+                hasAnniversary: hasAnniversaryToday(person)
             )
         }
         return SkySnapshot(stars: stars, lines: constellationLines(among: active))
+    }
+
+    /// True when this person holds a moment from today's month/day in a
+    /// past year — their star breathes a little brighter all day, and the
+    /// detail sheet answers the curiosity with the memory itself.
+    private static func hasAnniversaryToday(_ person: Person,
+                                            calendar: Calendar = .current,
+                                            now: Date = Date()) -> Bool {
+        let today = calendar.dateComponents([.month, .day, .year], from: now)
+        return (person.moments ?? []).contains { moment in
+            let m = calendar.dateComponents([.month, .day, .year], from: moment.timestamp)
+            return m.month == today.month && m.day == today.day
+                && (m.year ?? 0) < (today.year ?? 0)
+        }
     }
 
     /// Lines between people who share moments; strength grows with repetition.

@@ -513,6 +513,23 @@ final class SkyScene: SKScene, UIGestureRecognizerDelegate {
         // the detail you notice on the second week, not the first minute.
         node.cross.alpha = lum > 0.55 ? CGFloat((lum - 0.55) / 0.45) * 0.22 : 0
 
+        // Anniversary glow: a moment from this date, some past year — the
+        // halo breathes noticeably today. No banner, no badge; the sky itself
+        // is the notification. Idempotent like everything else here.
+        if star.hasAnniversary && !reduceMotion {
+            if node.halo.action(forKey: "anniversary") == nil {
+                let haloBase = 0.10 + 0.28 * lum
+                let swell = SKAction.fadeAlpha(to: min(0.6, haloBase + 0.25), duration: 2.2)
+                swell.timingMode = .easeInEaseOut
+                let ebb = SKAction.fadeAlpha(to: haloBase, duration: 2.2)
+                ebb.timingMode = .easeInEaseOut
+                node.halo.run(.repeatForever(.sequence([swell, ebb])),
+                              withKey: "anniversary")
+            }
+        } else {
+            node.halo.removeAction(forKey: "anniversary")
+        }
+
         guard !reduceMotion else {
             node.removeAction(forKey: "alpha")
             node.removeAction(forKey: "shimmer")
